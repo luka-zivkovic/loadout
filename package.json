@@ -1,0 +1,23 @@
+{
+  "name": "pi-share",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Portable Pi profiles, metadata-only usage analytics, and local review comparisons",
+  "type": "module",
+  "bin": { "pi-share": "dist/cli.js" },
+  "exports": { "./extension": "./dist/extension.js" },
+  "pi": { "extensions": ["./dist/extension.js"] },
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "start": "node dist/cli.js",
+    "demo": "npm run build && node dist/cli.js demo"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": { "@types/node": "22.18.6", "typescript": "5.9.3" }
+}
