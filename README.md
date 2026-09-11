@@ -1,166 +1,100 @@
-# Loadout
+<p align="center">
+  <img src="web/assets/loadout.svg" width="64" height="64" alt="Loadout logo">
+</p>
 
-A workspace for sharing reusable skills and native Pi, Claude Code, and Codex setups, with metadata-only usage analytics. **Version 0.4** adds standalone versioned skills, compatible-harness installation, skill pins, native configuration snapshots, and local telemetry adapters. The controlled review runner uses Pi **0.85.1**. The current product layer adds named local trials, revision inspection/diffs, withdrawal, device renewal and sync health, complete period analytics, and administrative operations.
+<h1 align="center">Loadout</h1>
 
-Publish a selected setup to your team's registry, pull a colleague's revision under a local alias, and sync metadata between devices. Configuration publishing and analytics sync are separate actions. Reviews and repository context stay on the machine running the comparison. JSON export/import remains available for offline exchange.
+<p align="center">Share the setup behind the work.</p>
 
-Start with **[dashboard and account setup](AUTH.md)**, **[shared skills and native harnesses](SKILLS-AND-HARNESSES.md)**, then **[the team workflow guide](TEAM.md)** for publishing configurations and syncing measurements. The service is self-hosted; this repository does not provision a cloud account.
+<p align="center">
+  <a href="#get-started">Get started</a> ·
+  <a href="TEAM.md">Team guide</a> ·
+  <a href="#what-gets-shared">What gets shared</a>
+</p>
 
-## Try it
+Loadout is a self-hosted workspace for sharing Pi, Claude Code, and Codex configurations, reusable skills, and usage measurements across a team.
 
-Requires Node **22.19+**, npm, and Git. Run these commands from this package directory:
+Want to try your colleague's code review setup on your own code? Inspect the files, pull a specific revision, and run it locally. You can also borrow a single skill without adopting their whole setup.
+
+[![Loadout's shared setup library, showing Pi, Claude Code, and Codex configurations](docs/images/shared-setups.png)](docs/images/shared-setups.png)
+
+<p align="center"><sub>The shared setup library, shown with sample names and configurations.</sub></p>
+
+## Get started
+
+You'll need Node.js 22.19 or newer, npm, and Git.
 
 ```sh
+git clone https://github.com/luka-zivkovic/loadout.git
+cd loadout
 npm ci --ignore-scripts
+npm run build
+node dist/cli.js serve --data .registry --team loadout --scope work
+```
+
+The dashboard runs at `http://127.0.0.1:4318`. Open the private installation URL saved in `.registry/setup-link.txt` to create the first admin account. Then invite teammates from **Team & access**; each person chooses their own password.
+
+Open **My devices** for instructions you can give to your local Pi, Claude Code, or Codex. Each device connects through your browser approval. Connecting a device doesn't publish its configuration or sync existing data.
+
+To connect from other machines, deploy the server behind HTTPS. The [account and deployment guide](AUTH.md) covers setup links, invitations, device access, and the reverse proxy configuration.
+
+## From your setup to a teammate's machine
+
+1. **Capture and inspect.** Save a local snapshot of your reusable configuration, then review its files and requirements.
+2. **Publish a revision.** Choose exactly what to share with the team. Later edits stay local until you capture and publish again.
+3. **Try it locally.** Inspect a colleague's revision and its changes, then pull it under a local name. Native setup exports go into a new configuration directory; your default setup stays in place.
+4. **Compare the results.** Collect usage measurements, inspect them in the dashboard, and record your judgment. Named trials keep the candidate revision, results, and decision together.
+
+Skills have their own version history and can be pinned into setups or installed separately. Compatibility is declared by the publisher; check a skill's instructions and dependencies before trying it in another harness.
+
+See the [team workflow](TEAM.md) and [skill sharing guide](SKILLS-AND-HARNESSES.md) for the commands.
+
+## Keep each harness native
+
+Loadout preserves each harness's configuration format. It doesn't translate an entire Claude Code setup into a Pi or Codex setup.
+
+| Harness     | Setup sharing                                       | Usage collection                               |
+| ----------- | --------------------------------------------------- | ---------------------------------------------- |
+| Pi          | Versioned profiles, skills, prompts, and extensions | Opt-in Pi extension and controlled review runs |
+| Claude Code | Native configuration snapshots and skills           | Local telemetry adapter                        |
+| Codex       | Native configuration snapshots and skills           | Local telemetry adapter                        |
+
+For a controlled code review comparison, the Pi runner gives each setup a fresh copy of the same frozen Git change and supplied context. Code and generated reviews stay on the machine running it. See the [Pi workflow guide](docs/PI-WORKFLOWS.md).
+
+Claude Code and Codex measurements describe observed usage. They don't establish equal task context, task completion, or the exact configuration used at runtime. Costs are usage estimates, and missing measurements stay unavailable. Tool counts and observed skill reads aren't quality scores.
+
+## What gets shared
+
+Workspace members can see the setup revisions and skills you publish, plus the measurements you sync.
+
+| Shared with the workspace                                                                           | Excluded from analytics sync                                    |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Selected configuration files, reusable instructions, skill files, hooks, and extensions you publish | Conversations, reasoning, and session traces                    |
+| Member/device identifiers, workflow labels, timestamps, and setup revisions                         | Task prompts, source code, diffs, and context documents         |
+| Model, tool, and skill names; usage counters; available cost estimates; human assessments           | Raw tool inputs and outputs, credentials, and generated reviews |
+
+Reusable files are intentionally shared content. Review them before publishing: credential filtering is best effort, and instructions or scripts can contain private information. Work and personal stores are separate, but the scope doesn't scrub file contents or choose your model account.
+
+Configuration publication is explicit. `team sync` exchanges saved measurements and catalogue metadata; `--watch` repeats that sync. Neither publishes local configuration changes nor installs newer revisions. Optional source checks can report drift without publishing it.
+
+The same disclosure is available under **What's shared** in the app and during device onboarding.
+
+## Development and guides
+
+```sh
+npm run check
 npm test
 npm run demo
 ```
 
-The demo runs real Pi sessions against a scripted local provider, requires no credentials, and makes no paid model calls. It creates two review profiles, freezes a tiny Git change, runs both profiles, and prints paths to the comparison report and metadata export. Demo records are explicitly labeled and excluded from normal analytics reports.
+The demo exercises Pi comparisons against a scripted local provider, with no credentials or paid model calls. It writes a comparison report and metadata export. See [validation](VALIDATION.md) for coverage and native harness smoke checks.
 
-Start the dashboard and create your admin account:
+Use `node dist/cli.js --help` for the CLI reference, or run `npm link` in this checkout to use the `loadout` command.
 
-```sh
-npm run dashboard
-```
+- [Accounts and deployment](AUTH.md): first admin, invitations, device approval, and HTTPS.
+- [Team workflows](TEAM.md): publishing, sync, revision history, and local trials.
+- [Skills and native harnesses](SKILLS-AND-HARNESSES.md): capture, installation, and telemetry.
+- [Pi workflows](docs/PI-WORKFLOWS.md): frozen context, comparisons, and review assessments.
+- [Operations](OPERATIONS.md): backups, quotas, withdrawal, and recovery.
 
-Open the private URL saved to `.registry/setup-link.txt`, create the first admin, and invite teammates under **Team & access**. The dashboard shows shared skills, native setups, usage, comparisons, and connected devices. **My devices** supplies credential-free instructions you can give to Pi, Claude Code, or Codex; each device requires your browser approval.
-
-Use **What’s shared** on account screens or in the dashboard footer for the sharing disclosure. It also appears in device onboarding and copied harness instructions: reusable setup files and usage metadata are shared with workspace members; session traces and task content are excluded from analytics sync.
-
-Use `node dist/cli.js --help` for all commands. Optionally run `npm link` to make the same CLI available as `loadout` (the `pi-share` command remains an alias).
-
-Loadout was previously called Pi Share. Existing `~/.pi-share` data, workspace names, device credentials, and configuration formats are retained, so current installations keep working. The checkout may still be named `pi-share`.
-
-## Share your actual review setup
-
-Capture the global Pi configuration and, optionally, a project's `.pi` configuration:
-
-```sh
-node dist/cli.js profile capture makina-review \
-  --scope work --project /path/to/repository \
-  --workflow pr-review --prompt /path/to/review-request.md
-
-node dist/cli.js setup inspect makina-review --scope work
-node dist/cli.js profile export makina-review --scope work \
-  --out /path/to/exchange/makina-review.profile.json
-```
-
-The request file is the reusable workflow entry point. For example, if your setup has a skill named `review`, it could contain `/skill:review Review this frozen change.` Omit `--prompt` to use the included general review request. The `--workflow` value is a grouping label; it does not infer a workflow from past sessions.
-
-Each colleague captures and exports their own named profile. On the receiving machine:
-
-```sh
-node dist/cli.js profile import /path/to/exchange/colleague-review.profile.json --scope work
-node dist/cli.js profile list --scope work
-```
-
-Import stores an immutable revision and updates its local name pointer. It does not replace your normal Pi settings. Names can refer to the latest import; use the full revision hash to select an older version.
-
-Capture defaults to `PI_CODING_AGENT_DIR` or `~/.pi/agent`; `--agent-dir` selects another source. Local model credentials and custom `models.json` definitions must exist on the receiving device. Runs use `--auth-dir`, `PI_CODING_AGENT_DIR`, or `~/.pi/agent` for those local credentials. **The work/personal scope does not select a credential account.**
-
-### What a profile contains
-
-- Pi version; model, thinking level, tool defaults, and supported inference settings.
-- Workflow request, global instructions, explicit system prompt overrides, skills, prompt templates, and extension source files, including executable script permissions.
-- Exact npm package versions or Git commit references, required local capabilities, and a list of settings omitted by capture.
-- A SHA-256 revision over the profile's content.
-
-Credentials, `models.json`, session history, memory directories, `.git`, and `node_modules` are excluded from capture. Common credential filenames and embedded token patterns are rejected. This check is best effort: profile files and the reusable workflow request are intentionally shared content, and may contain your own proprietary instructions.
-
-Unpinned packages, package filtering objects, resource selection globs, and symlinks are rejected rather than silently changing the setup. Package references must look like `npm:@team/review@1.2.3` or `git:github.com/team/review@<40-character-commit>`. A project's declaration replaces the same global package's version. Loose extensions with external dependencies may require conversion into a pinned Pi package; the prototype does not restore their local `node_modules`.
-
-## Compare on the same context
-
-Freeze the exact base and head commits, with optional shared task documentation:
-
-```sh
-node dist/cli.js freeze --repo /path/to/repository \
-  --base origin/main --head HEAD \
-  --context /path/to/review-context --out /path/to/frozen-review
-
-node dist/cli.js compare --scope work --actor makina \
-  --profiles makina-review,colleague-review \
-  --packet /path/to/frozen-review --repeat 2
-```
-
-Omit `--context` when no extra documents are needed. If the PR base should be its merge base, resolve that commit first and pass it as `--base`. The tool compares the two supplied commits directly.
-
-The packet contains the exact tracked head files, a binary-capable diff, the explicitly provided context directory, and a Git bundle containing the base/head commits and their reachable history. Uncommitted and untracked work is excluded. Symlinks and submodules are currently unsupported. Packets are local code artifacts; neither profile export nor analytics export includes them.
-
-Every run receives a fresh copy of the same packet and an in-memory Pi session. The agent sees `repo/`, `PR.diff`, and `context/`; `git -C repo diff base..HEAD` also works. The runner loads the selected profile's resources and the frozen repository's root instructions, with ambient resource discovery disabled. It validates the packet's file contents before and after running. Changed working files make the run invalid.
-
-This addresses context in two parts: your colleague supplies the reusable setup; both setups receive the same task evidence. Extra organizational knowledge needed by both belongs in `--context`. A private memory file or an external service available only to one setup makes a broader comparison, and must be accounted for when interpreting results.
-
-By default each profile keeps its model, thinking level, and tools. `--model PROVIDER/MODEL` applies the same model to both. `--tool-policy read-only` fixes the built-in tools to `read`, `grep`, `find`, and `ls`; this override is recorded. For a focused skill comparison, also use profiles with the same thinking setting. Repeats alternate execution order.
-
-Extensions remain trusted executable code, including under the read-only policy. This is configuration isolation, not an OS sandbox: extension code, Bash, and external integrations can reach outside the packet. The built-in read tools are restricted to the packet and profile directory, but file validation cannot make arbitrary extensions deterministic. Executing a colleague's profile should follow your existing policy for running their code.
-
-Run only one imported setup with:
-
-```sh
-node dist/cli.js run colleague-review --scope work --packet /path/to/frozen-review
-```
-
-Each run saves `review.md`, `metrics.json`, and configuration fingerprints under `~/.pi-share/work/runs/<run-id>/`. It does not save a transcript or raw tool events. A comparison saves a Markdown report with setup revisions, context hashes, tool calls/errors, observed skill loads, tokens, estimated cost, and duration.
-
-## Collect analytics during normal Pi work
-
-Load the built extension when starting Pi in your usual repository. Replace the extension path with its absolute path on that device:
-
-```sh
-PI_SHARE_SCOPE=work PI_SHARE_ACTOR=makina PI_SHARE_PROFILE=makina \
-  pi -e /absolute/path/to/pi-share/dist/extension.js
-```
-
-Inside Pi, enter `/share-start pr-review`, perform the workflow, then enter `/share-stop`. Collection is opt-in and stays local. Closing a measured session without stopping marks it aborted. Your existing Pi installation retains its normal session behavior; this extension does not copy or export those sessions.
-
-The extension snapshots configuration at the start and measures subsequent main-session activity. It deliberately excludes the interactive request, so use `profile capture --prompt ...` when creating a replayable workflow. Model changes appear as separate model counters. Configuration fingerprints describe the starting setup; arbitrary dynamic extension changes are not fully captured.
-
-Use the same `PI_SHARE_ACTOR` or CLI `--actor` on your devices to group your records. Device IDs are generated separately in each store. Use `PI_SHARE_SCOPE=personal` for personal work. All CLI commands also accept `--home DIR` (or `PI_SHARE_HOME`) to select a different storage root. Work and personal imports cannot be mixed.
-
-### Exchange metadata
-
-```sh
-node dist/cli.js analytics export --scope work --out /path/to/exchange/makina-metrics.json
-node dist/cli.js analytics import /path/to/exchange/colleague-metrics.json --scope work
-node dist/cli.js analytics report --scope work
-```
-
-Share these explicit exports, rather than the whole store: the store also contains local code packets and final reviews. Imports validate a strict schema, deduplicate identical run IDs, and reject changes to immutable run data. Version 2 exports also carry the edit history of human assessments; version 1 exports remain readable. The team registry supports the same boundaries through authenticated, incremental synchronization.
-
-| Exported analytics | Deliberately absent |
-| --- | --- |
-| Actor/device IDs, timestamps, work/personal scope | Conversation messages and reasoning |
-| Workflow ID, setup revision, effective setup hash, context hash | Task prompts, diffs, source code, context documents |
-| Model/thinking settings, token/cache counters, estimated model cost | Tool arguments, commands, file paths, tool results |
-| Tool names, counts, errors, aggregate duration | Credentials, environment values, provider error bodies |
-| Available/observed skill names and content hashes | Skill bodies and final review text |
-| Completion/failure category, optional human scores | A raw event stream or session trace |
-
-IDs, model/tool/skill names, timestamps, and activity volumes are still identifying metadata. A context hash links equivalent inputs; it cannot reconstruct missing context.
-
-Skill measurement distinguishes availability from observed loading via a successful built-in `read` or explicit `/skill:` command. It does not prove that the model followed a skill, and misses skills loaded through Bash or arbitrary extensions. Tool and token totals cover the instrumented Pi session; separate subprocess agents and services require their own instrumentation. Day-to-day extension hooks also do not expose every internal retry.
-
-Costs are the Pi model usage estimates from observed assistant messages, not subscription invoices. Missing estimates remain unknown. Internal summarization and direct model calls made by extensions may be unobserved. Transitive package versions, external services, environment variables, and dynamic extension state can still vary; starting configuration fingerprints help identify differences but do not guarantee fully reproducible execution.
-
-## Evaluate review quality
-
-Read the local reviews against the actual change, then record human judgments:
-
-```sh
-node dist/cli.js score RUN_UUID --scope work --valid 2 --false 1 --missed 0
-node dist/cli.js analytics report --scope work --comparison COMPARISON_UUID
-```
-
-`missed` requires known defects or an adjudicated reference. Lower spend or more skill/tool usage is not a quality score. Compare several representative changes and inspect valid findings, false positives, and missed issues together. The prototype does not automatically declare a winner.
-
-Scores are now immutable assessment events attached to a run and reviewer. Editing a score creates a new event that supersedes the locally known versions. Concurrent offline edits remain visible as conflicting versions after sync. Inspect them, then run `score` again to record the resolution. Different reviewers retain independent assessments. Regenerate the analytics report after scoring; the original comparison report is a snapshot. Existing version 1 scores are retained and migrated to assessment events when their owner's metadata is synced.
-
-## Validation and next boundary
-
-`npm test` exercises profile exchange, credential/trace exclusion, exact context freezing, metadata merging, actual Pi SDK execution across two stores, imported extensions/custom providers, and setup failure reporting. See [VALIDATION.md](VALIDATION.md) for the separate live-model smoke test.
-
-The registry, dashboard, account invitations, browser-approved device login, incremental/watch sync, setup catalogue, namespaced imports, and score edit history are implemented. The dashboard now prepares a named CLI handoff for local trials and tracks synced results and explicit decisions. SSO/MFA, automated email delivery, full transitive dependency locking, and instrumentation adapters for subprocess agents remain future work. See [TEAM.md](TEAM.md) for the current deployment and coverage limits.
-
-See [audit fixes and evidence](AUDIT-FIXES.md) for this implementation pass and [operations](OPERATIONS.md) for deployment checks, quotas, withdrawal, and recovery.
+Loadout is early software. Extensions run as trusted local code. SSO, MFA, and automated invitation emails aren't implemented. Existing Pi Share installations retain their `.pi-share` stores and CLI alias.
