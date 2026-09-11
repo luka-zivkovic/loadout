@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pi Share — Dark Console</title>
+    <meta
+      name="description"
+      content="Design prototype for Pi Share, a self-hosted team workspace for sharing Pi harness configurations. All values are sample data."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Icon sprite: Lucide outline family, 1.5px stroke -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <symbol id="i-bar-chart" viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v3" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></symbol>
+      <symbol id="i-compare" viewBox="0 0 24 24"><circle cx="5" cy="6" r="3" /><path d="M12 6h5a2 2 0 0 1 2 2v7" /><path d="m15 9-3-3 3-3" /><circle cx="19" cy="18" r="3" /><path d="M12 18H7a2 2 0 0 1-2-2V9" /><path d="m9 15 3 3-3 3" /></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></symbol>
+      <symbol id="i-cpu" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2" /><rect width="6" height="6" x="9" y="9" /><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" /></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6" /><path d="m8 6-6 6 6 6" /></symbol>
+      <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 12h16" /><path d="M4 6h16" /><path d="M4 18h16" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" /></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+      <symbol id="i-updown" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6" /><path d="M12 19h8" /></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></symbol>
+      <symbol id="i-dollar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" /><path d="M12 18V6" /></symbol>
+      <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16" /><path d="M4 15h16" /><path d="M10 3 8 21" /><path d="M16 3l-2 18" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+    </svg>
+
+    <!-- ================================================================
+         SCREEN: Sign-in / auth artboard
+         Variants (sign in, first-admin setup, invitation, reset) are the
+         real product's four auth modes; switch them with the chips.
+         ================================================================ -->
+    <section class="screen active" id="screen-auth" aria-labelledby="auth-title">
+      <div class="auth-layout">
+        <aside class="auth-story">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">π</span>
+            <span>pi share<span class="brand-dot">.</span></span>
+          </div>
+          <div>
+            <span class="eyebrow accent">A shared way to work</span>
+            <h1>Your team’s better defaults.</h1>
+            <p class="lede">
+              Discover the setups behind good work. Try them on your own code.
+              Compare them against the same frozen context.
+            </p>
+            <div class="story-lines">
+              <div><svg class="icon icon-lg"><use href="#i-layers" /></svg><span>Portable harness configurations, pinned to a revision</span></div>
+              <div><svg class="icon icon-lg"><use href="#i-bar-chart" /></svg><span>Workflow, tool, and spend analytics from metadata only</span></div>
+              <div><svg class="icon icon-lg"><use href="#i-compare" /></svg><span>Comparisons with the code and context held constant</span></div>
+            </div>
+          </div>
+          <span class="story-footer"><svg class="icon"><use href="#i-shield" /></svg> Conversations, model output, and code stay on your devices.</span>
+        </aside>
+
+        <main class="auth-main">
+          <span class="team-label"><span class="status-dot" aria-hidden="true"></span>acme-eng / reviews</span>
+
+          <div class="auth-form">
+            <span class="eyebrow" id="auth-eyebrow">Welcome back</span>
+            <h1 id="auth-title">Sign in to Pi Share</h1>
+            <p class="lede" id="auth-lede">Your shared setups and team activity, in one place.</p>
+
+            <form id="auth-form" class="form-stack" novalidate>
+              <div class="field" data-for="setup" hidden>
+                <label class="label" for="f-token">Installation key <span class="req" aria-hidden="true">*</span></label>
+                <input id="f-token" name="token" placeholder="psb_…" autocomplete="off" />
+                <span class="hint">Open the private setup link saved by the server, or paste its key here. Only the first admin ever sees this step.</span>
+              </div>
+              <div class="field" data-for="setup join" hidden>
+                <label class="label" for="f-name">Full name <span class="req" aria-hidden="true">*</span></label>
+                <input id="f-name" name="name" autocomplete="name" placeholder="Your name" />
+              </div>
+              <div class="field" data-for="setup login">
+                <label class="label" for="f-email">Email address <span class="req" aria-hidden="true">*</span></label>
+                <input id="f-email" name="email" type="email" autocomplete="username" placeholder="you@company.com" />
+                <span class="field-error" id="f-email-error" hidden><svg class="icon icon-sm"><use href="#i-alert" /></svg><span>Enter the email address on your account, for example you@company.com.</span></span>
+              </div>
+              <div class="field" data-for="setup" hidden>
+                <label class="label" for="f-handle">Member handle <span class="req" aria-hidden="true">*</span></label>
+                <input id="f-handle" name="actorId" placeholder="e.g. alex" autocomplete="off" />
+                <span class="hint">Identifies your setups and activity across devices.</span>
+              </div>
+              <div class="field" data-for="setup join reset login">
+                <label class="label" for="f-password"><span id="f-password-label">Password</span> <span class="req" aria-hidden="true">*</span></label>
+                <input id="f-password" name="password" type="password" autocomplete="current-password" />
+                <span class="hint" id="f-password-hint" hidden>Use at least 12 characters. You choose it; admins never see it.</span>
+                <span class="field-error" id="f-password-error" hidden><svg class="icon icon-sm"><use href="#i-alert" /></svg><span>Enter your password to continue.</span></span>
+              </div>
+              <button class="button primary full" type="submit" id="auth-submit">
+                <span id="auth-submit-label">Sign in</span>
+                <svg class="icon"><use href="#i-arrow-right" /></svg>
+              </button>
+            </form>
+
+            <p class="auth-foot" id="auth-foot">New here or locked out? Ask your admin for an invitation or a password reset link. No self-service sign-up.</p>
+
+            <p class="auth-foot">Design prototype · sample data only. Do not enter a real password.</p>
+            <button class="button secondary full" type="button" id="explore-prototype">Explore sample workspace</button>
+
+            <div class="auth-variants" role="group" aria-label="Auth screen variants (prototype only)">
+              <span class="label">Prototype control · switch auth variant</span>
+              <button class="chip" type="button" data-variant="login" aria-pressed="true">Sign in</button>
+              <button class="chip" type="button" data-variant="setup" aria-pressed="false">First-admin setup</button>
+              <button class="chip" type="button" data-variant="join" aria-pressed="false">Invitation</button>
+              <button class="chip" type="button" data-variant="reset" aria-pressed="false">Password reset</button>
+            </div>
+          </div>
+
+          <span class="auth-bottom">Self-hosted · Invitation only · Built for Pi</span>
+        </main>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         SCREEN: Workspace shell
+         ================================================================ -->
+    <section class="screen" id="screen-app">
+      <div class="workspace" id="workspace">
+        <div class="nav-backdrop" id="nav-backdrop"></div>
+
+        <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">π</span>
+            <span>pi share<span class="brand-dot">.</span></span>
+          </div>
+
+          <button class="workspace-id" type="button" aria-label="Workspace acme-eng, scope reviews. Switch scope" title="Switch scope">
+            <span class="workspace-letter" aria-hidden="true">A</span>
+            <span class="od-stat">
+              <strong>acme-eng</strong>
+              <small>scope · reviews</small>
+            </span>
+            <svg class="icon"><use href="#i-updown" /></svg>
+          </button>
+
+          <div>
+            <div class="nav-caption">Workspace</div>
+            <nav class="nav" aria-label="Primary">
+              <a class="nav-item" href="#/overview" data-page="overview"><svg class="icon"><use href="#i-bar-chart" /></svg>Overview</a>
+              <a class="nav-item" href="#/setups" data-page="setups"><svg class="icon"><use href="#i-layers" /></svg>Shared setups<span class="count" id="nav-setups-count"></span></a>
+              <a class="nav-item" href="#/activity" data-page="activity"><svg class="icon"><use href="#i-activity" /></svg>Activity</a>
+              <a class="nav-item" href="#/comparisons" data-page="comparisons"><svg class="icon"><use href="#i-compare" /></svg>Comparisons</a>
+              <a class="nav-item" href="#/devices" data-page="devices"><svg class="icon"><use href="#i-monitor" /></svg>My devices</a>
+              <a class="nav-item" href="#/team" data-page="team"><svg class="icon"><use href="#i-users" /></svg>Team &amp; access</a>
+            </nav>
+          </div>
+
+          <div class="sidebar-bottom">
+            <div class="privacy-note">
+              <svg class="icon"><use href="#i-shield" /></svg>
+              <div>
+                <strong>Metadata, shared.</strong>
+                <small>Conversations, model output, and code never leave your devices.</small>
+              </div>
+            </div>
+            <div class="account">
+              <span class="avatar" aria-hidden="true">AL</span>
+              <span class="od-stat">
+                <strong>Alex Lindqvist</strong>
+                <small>admin · alex</small>
+              </span>
+              <button class="icon-button" type="button" id="sign-out" aria-label="Sign out"><svg class="icon"><use href="#i-logout" /></svg></button>
+            </div>
+          </div>
+        </aside>
+
+        <div class="workspace-main">
+          <header class="topbar">
+            <button class="icon-button menu-toggle" type="button" id="menu-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"><svg class="icon icon-lg"><use href="#i-menu" /></svg></button>
+            <span class="crumbs">acme-eng <span class="slash">/</span> <strong id="crumb-page">Overview</strong></span>
+            <div class="topbar-right">
+              <span class="local-label"><span class="status-dot" aria-hidden="true"></span>self-hosted · v0.9 <span class="sample-tag">sample</span></span>
+            </div>
+          </header>
+
+          <main class="content" id="content">
+            <!-- ---------------- Page: Overview ---------------- -->
+            <div class="page" id="page-overview" data-title="Overview">
+              <div style="display: grid; gap: var(--s-6)">
+                <div class="page-heading">
+                  <div>
+                    <span class="eyebrow">Team intelligence</span>
+                    <h1>Overview</h1>
+                    <p class="lede">How the team’s harnesses ran in the selected period. Built from metadata only; conversations and code stay on each device.</p>
+                  </div>
+                  <div class="actions">
+                    <a class="button primary" href="#/devices"><svg class="icon"><use href="#i-plus" /></svg>Connect a harness</a>
+                  </div>
+                </div>
+
+                <div class="toolbar">
+                  <div class="segmented" role="group" aria-label="Activity source">
+                    <button type="button" data-mode="live" aria-pressed="true">Live activity</button>
+                    <button type="button" data-mode="demo" aria-pressed="false">Demo activity</button>
+                  </div>
+                  <div class="toolbar-right">
+                    <label class="sr-only" for="range">Time period</label>
+                    <select id="range">
+                      <option value="7">Last 7 days</option>
+                      <option value="30" selected>Last 30 days</option>
+                      <option value="90">Last 90 days</option>
+                    </select>
+                    <button class="icon-button bordered" type="button" id="refresh" aria-label="Refresh data"><svg class="icon"><use href="#i-refresh" /></svg></button>
+                  </div>
+                </div>
+
+                <div class="notice" id="demo-notice" hidden>
+                  <svg class="icon"><use href="#i-info" /></svg>
+                  <span>Demo measurements are isolated from live activity. They do not indicate real model quality or spend.</span>
+                </div>
+
+                <div class="metric-grid" id="metrics" aria-live="polite">
+                  <section class="panel metric" aria-labelledby="m-runs">
+                    <div class="od-row"><span id="m-runs">Runs shared</span><svg class="icon"><use href="#i-activity" /></svg></div>
+                    <strong class="value" data-metric="runs">—</strong>
+                    <small class="note" data-note="runs"></small>
+                  </section>
+                  <section class="panel metric" aria-labelledby="m-spend">
+                    <div class="od-row"><span id="m-spend">Estimated spend</span><svg class="icon"><use href="#i-dollar" /></svg></div>
+                    <strong class="value" data-metric="spend">—</strong>
+                    <small class="note" data-note="spend"></small>
+                  </section>
+                  <section class="panel metric" aria-labelledby="m-tools">
+                    <div class="od-row"><span id="m-tools">Tool calls</span><svg class="icon"><use href="#i-cpu" /></svg></div>
+                    <strong class="value" data-metric="tools">—</strong>
+                    <small class="note" data-note="tools"></small>
+                  </section>
+                  <section class="panel metric" aria-labelledby="m-setups">
+                    <div class="od-row"><span id="m-setups">Shared setups</span><svg class="icon"><use href="#i-layers" /></svg></div>
+                    <strong class="value" data-metric="setups">—</strong>
+                    <small class="note" data-note="setups"></small>
+                  </section>
+                </div>
+
+                <div class="chart-grid">
+                  <section class="panel" aria-labelledby="h-activity">
+                    <div class="panel-heading">
+                      <div>
+                        <h2 id="h-activity">Workflow activity</h2>
+                        <span class="sub">Shared runs per day · UTC · <span class="sample-tag">sample data</span></span>
+                      </div>
+                      <span class="legend" id="chart-legend"><i></i>runs</span>
+                    </div>
+                    <div class="chart">
+                      <div class="chart-wrap" id="chart-wrap">
+                        <svg id="chart" role="img" aria-labelledby="chart-desc" preserveAspectRatio="none"></svg>
+                        <div class="chart-tip" id="chart-tip" aria-hidden="true"></div>
+                      </div>
+                      <p id="chart-desc" class="sr-only"></p>
+                    </div>
+                  </section>
+
+                  <section class="panel" aria-labelledby="h-tools">
+                    <div class="panel-heading">
+                      <div>
+                        <h2 id="h-tools">Tool usage</h2>
+                        <span class="sub">Most-called tools in shared runs · <span class="sample-tag">sample data</span></span>
+                      </div>
+                      <svg class="icon icon-lg"><use href="#i-code" /></svg>
+                    </div>
+                    <div class="tool-list" id="tool-list"></div>
+                  </section>
+                </div>
+
+                <section class="panel" aria-labelledby="h-recent">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-recent">Recently shared setups</h2>
+                      <span class="sub">Latest published revisions from your team</span>
+                    </div>
+                    <a class="text-button" href="#/setups">View all setups <svg class="icon icon-sm"><use href="#i-arrow-right" /></svg></a>
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Setup</th>
+                          <th scope="col">Owner</th>
+                          <th scope="col">Model</th>
+                          <th scope="col">Workflow</th>
+                          <th scope="col">Revision</th>
+                          <th scope="col">Shared</th>
+                        </tr>
+                      </thead>
+                      <tbody id="recent-body"></tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <!-- ---------------- Page: Shared setups ---------------- -->
+            <div class="page" id="page-setups" data-title="Shared setups" hidden>
+              <div style="display: grid; gap: var(--s-6)">
+                <div class="page-heading">
+                  <div>
+                    <span class="eyebrow">Library</span>
+                    <h1>Shared setups</h1>
+                    <p class="lede">Discover, inspect, and pull a teammate’s harness configuration. Every listing is pinned to an immutable revision.</p>
+                  </div>
+                  <div class="actions">
+                    <a class="button primary" href="#/devices"><svg class="icon"><use href="#i-plus" /></svg>Connect a harness</a>
+                  </div>
+                </div>
+
+                <section class="panel" aria-labelledby="h-library">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-library">Team setup library <span class="count" id="library-count"></span></h2>
+                      <span class="sub">Published configurations · <span class="sample-tag">sample data</span></span>
+                    </div>
+                    <svg class="icon icon-lg"><use href="#i-box" /></svg>
+                  </div>
+                  <div class="search-row">
+                    <div class="search-field">
+                      <svg class="icon"><use href="#i-search" /></svg>
+                      <label class="sr-only" for="setup-search">Search shared setups</label>
+                      <input id="setup-search" type="search" placeholder="Search setups, owners, models, or workflows…" autocomplete="off" />
+                    </div>
+                    <label class="sr-only" for="setup-workflow">Filter by workflow</label>
+                    <select id="setup-workflow"><option value="">All workflows</option></select>
+                    <label class="sr-only" for="setup-model">Filter by model</label>
+                    <select id="setup-model"><option value="">All models</option></select>
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Setup</th>
+                          <th scope="col">Owner</th>
+                          <th scope="col">Revision</th>
+                          <th scope="col">Model</th>
+                          <th scope="col">Workflow</th>
+                          <th scope="col">Last shared</th>
+                          <th scope="col"><span class="sr-only">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="setups-body"></tbody>
+                    </table>
+                  </div>
+                  <div class="empty" id="setups-empty" hidden>
+                    <span class="empty-icon"><svg class="icon icon-xl"><use href="#i-search" /></svg></span>
+                    <h3>No matching setups</h3>
+                    <p>Try another name, owner, model, or workflow, or clear the filters.</p>
+                    <button class="button secondary small" type="button" id="setups-clear">Clear search and filters</button>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <!-- ---------------- Page: Activity ---------------- -->
+            <div class="page" id="page-activity" data-title="Activity" hidden>
+              <div style="display: grid; gap: var(--s-6)">
+                <div class="page-heading">
+                  <div>
+                    <span class="eyebrow">Runs</span>
+                    <h1>Activity</h1>
+                    <p class="lede">What ran, which tools it used, and what it cost. Select two to four runs to compare their configuration and context.</p>
+                  </div>
+                </div>
+                <section class="panel" aria-labelledby="h-runs">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-runs">Shared runs <span class="count" id="runs-count"></span></h2>
+                      <span class="sub">Newest first · <span class="sample-tag">sample data</span></span>
+                    </div>
+                    <button class="button secondary" type="button" id="compare-selected" disabled><svg class="icon"><use href="#i-compare" /></svg>Compare <span id="compare-n"></span></button>
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col"><span class="sr-only">Select</span></th>
+                          <th scope="col">Run / setup</th>
+                          <th scope="col">Member</th>
+                          <th scope="col">Status</th>
+                          <th scope="col" class="num">Time</th>
+                          <th scope="col">Tools / skills</th>
+                          <th scope="col" class="num">Est. spend</th>
+                        </tr>
+                      </thead>
+                      <tbody id="runs-body"></tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <!-- ---------------- Page: Comparisons ---------------- -->
+            <div class="page" id="page-comparisons" data-title="Comparisons" hidden>
+              <div style="display: grid; gap: var(--s-6)">
+                <div class="page-heading">
+                  <div>
+                    <span class="eyebrow">Experiments</span>
+                    <h1>Comparisons</h1>
+                    <p class="lede">Compare review setups against the same frozen code and context. Cost and speed describe usage; human assessment describes quality. No winner is inferred.</p>
+                  </div>
+                </div>
+
+                <div class="local-note">
+                  <svg class="icon"><use href="#i-shield" /></svg>
+                  <span><strong>Model output and code stay local.</strong> Pi Share receives only the context fingerprint, the setup revision, timing, token counts, and the assessment you record. Open the packet on the device that ran it to read the actual findings.</span>
+                </div>
+
+                <section class="panel" aria-labelledby="h-experiments">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-experiments">Comparison experiments <span class="count" id="exp-count"></span></h2>
+                      <span class="sub">Runs launched together with <code>pi-share compare</code> · <span class="sample-tag">sample data</span></span>
+                    </div>
+                    <svg class="icon icon-lg"><use href="#i-compare" /></svg>
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Experiment</th>
+                          <th scope="col">Setups</th>
+                          <th scope="col" class="num">Runs</th>
+                          <th scope="col">Context</th>
+                          <th scope="col">Assessed</th>
+                          <th scope="col"><span class="sr-only">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="exp-body"></tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <!-- ---------------- Page: My devices ---------------- -->
+            <div class="page" id="page-devices" data-title="My devices" hidden>
+              <div style="display: grid; gap: var(--s-6)">
+                <div class="page-heading">
+                  <div>
+                    <span class="eyebrow">Device pairing</span>
+                    <h1>My devices</h1>
+                    <p class="lede">Connect your harnesses without sharing account passwords. Each device gets its own revocable credential after you approve a matching code in this browser.</p>
+                  </div>
+                </div>
+
+                <div class="page-grid">
+                  <section class="panel" aria-labelledby="h-connect">
+                    <div class="panel-heading">
+                      <div>
+                        <h2 id="h-connect">Connect through your harness</h2>
+                        <span class="sub">Give these instructions to Pi on the device you want to connect</span>
+                      </div>
+                      <svg class="icon icon-lg"><use href="#i-terminal" /></svg>
+                    </div>
+                    <div class="panel-body">
+                      <ol class="steps">
+                        <li><span><strong>Run the device login</strong> on the machine that hosts your harness.</span></li>
+                        <li><span>The harness prints a <strong>short device code</strong> and starts polling.</span></li>
+                        <li><span><strong>Enter the code here</strong> and approve it. The harness receives its own credential; your password never leaves this browser.</span></li>
+                      </ol>
+                      <pre class="spaced" id="device-instructions">pi-share team login acme-eng --scope reviews
+# opens a device code; approve it at https://pi.acme.internal/devices</pre>
+                      <div class="cmd-actions">
+                        <button class="button secondary small" type="button" data-copy="#device-instructions"><svg class="icon icon-sm"><use href="#i-copy" /></svg>Copy harness instructions</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="panel" aria-labelledby="h-approve">
+                    <div class="panel-heading">
+                      <div>
+                        <h2 id="h-approve">Approve a device</h2>
+                        <span class="sub">Enter the code shown by your local harness</span>
+                      </div>
+                      <svg class="icon icon-lg"><use href="#i-shield" /></svg>
+                    </div>
+                    <div class="panel-body">
+                      <form id="device-form" class="form-stack" novalidate>
+                        <div class="field">
+                          <label class="label" for="device-code">Device code <span class="req" aria-hidden="true">*</span></label>
+                          <input class="device-code-input" id="device-code" placeholder="ABCDE-12345" autocomplete="off" spellcheck="false" maxlength="11" />
+                          <span class="hint">Five characters, a dash, five characters. Codes expire after 10 minutes.</span>
+                          <span class="field-error" id="device-code-error" hidden><svg class="icon icon-sm"><use href="#i-alert" /></svg><span>Enter the code exactly as shown, like ABCDE-12345.</span></span>
+                        </div>
+                        <div><button class="button secondary" type="submit">Check device</button></div>
+                      </form>
+                      <div class="approval" id="approval" hidden>
+                        <h3 id="approval-label">alex-macbook · pi 0.31.2</h3>
+                        <span class="code" id="approval-code">7F3A2-9C1D0</span>
+                        <p>Expires in 9 minutes. Approve only if this code matches the one on the device you are connecting.</p>
+                        <div class="row-actions spaced">
+                          <button class="button primary" type="button" id="approve-yes">Approve device</button>
+                          <button class="button secondary" type="button" id="approve-no">Deny</button>
+                        </div>
+                      </div>
+                      <div class="success spaced" id="approval-done" hidden><svg class="icon"><use href="#i-check" /></svg><span>Approved. Your harness will finish connecting on its next poll.</span></div>
+                    </div>
+                  </section>
+                </div>
+
+                <section class="panel" aria-labelledby="h-devices">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-devices">Your connected devices</h2>
+                      <span class="sub">Each device has a separate, revocable credential · <span class="sample-tag">sample data</span></span>
+                    </div>
+                    <button class="text-button quiet" type="button"><svg class="icon icon-sm"><use href="#i-refresh" /></svg>Refresh</button>
+                  </div>
+                  <div class="panel-body" id="device-list"></div>
+                </section>
+              </div>
+            </div>
+
+            <!-- ---------------- Page: Team & access ---------------- -->
+            <div class="page" id="page-team" data-title="Team &amp; access" hidden>
+              <div style="display: grid; gap: var(--s-6)">
+                <div class="page-heading">
+                  <div>
+                    <span class="eyebrow">Admin</span>
+                    <h1>Team &amp; access</h1>
+                    <p class="lede">Invite teammates and manage who can access this workspace. Invitations are single-use private links; the recipient chooses their own password.</p>
+                  </div>
+                  <div class="actions">
+                    <button class="button primary" type="button" id="open-invite"><svg class="icon"><use href="#i-plus" /></svg>Invite teammate</button>
+                  </div>
+                </div>
+
+                <section class="panel" aria-labelledby="h-members">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-members">Members <span class="count" id="members-count"></span></h2>
+                      <span class="sub">Admins manage accounts. Members share setups and review activity · <span class="sample-tag">sample data</span></span>
+                    </div>
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Member</th>
+                          <th scope="col">Handle</th>
+                          <th scope="col">Role</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Manage</th>
+                        </tr>
+                      </thead>
+                      <tbody id="members-body"></tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section class="panel" aria-labelledby="h-invites">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="h-invites">Pending invitations <span class="count" id="invites-count"></span></h2>
+                      <span class="sub">Single-use links expire after 7 days. Share them directly with the intended person; no email is sent.</span>
+                    </div>
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Recipient</th>
+                          <th scope="col">Handle</th>
+                          <th scope="col">Role</th>
+                          <th scope="col">Expires</th>
+                          <th scope="col"><span class="sr-only">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="invites-body"></tbody>
+                    </table>
+                  </div>
+                  <div class="inline-empty" id="invites-empty" hidden>No pending invitations.</div>
+                </section>
+              </div>
+            </div>
+
+            <footer class="content-footer">
+              <span>pi share / reviews</span>
+              <span>Usage estimates from provider metadata. Quality requires human review.</span>
+            </footer>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         OVERLAYS
+         ================================================================ -->
+
+    <!-- Setup inspect drawer -->
+    <dialog class="drawer" id="drawer-setup" aria-labelledby="drawer-title">
+      <div class="drawer-head">
+        <div class="od-stat">
+          <span class="eyebrow" id="drawer-eyebrow">Setup</span>
+          <h2 id="drawer-title">—</h2>
+        </div>
+        <button class="icon-button" type="button" data-close aria-label="Close setup details"><svg class="icon icon-lg"><use href="#i-x" /></svg></button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+    </dialog>
+
+    <!-- Compare modal -->
+    <dialog class="modal" id="modal-compare" aria-labelledby="compare-title">
+      <div class="drawer-head">
+        <div class="od-stat">
+          <span class="eyebrow" id="compare-eyebrow">Comparison</span>
+          <h2 id="compare-title">Compare runs</h2>
+        </div>
+        <button class="icon-button" type="button" data-close aria-label="Close comparison"><svg class="icon icon-lg"><use href="#i-x" /></svg></button>
+      </div>
+      <div class="modal-body" id="compare-body"></div>
+    </dialog>
+
+    <!-- Invite modal -->
+    <dialog class="modal narrow" id="modal-invite" aria-labelledby="invite-title">
+      <div class="drawer-head">
+        <div class="od-stat">
+          <span class="eyebrow">Team &amp; access</span>
+          <h2 id="invite-title">Invite a teammate</h2>
+        </div>
+        <button class="icon-button" type="button" data-close aria-label="Close invitation form"><svg class="icon icon-lg"><use href="#i-x" /></svg></button>
+      </div>
+      <form class="modal-body" id="invite-form" novalidate>
+        <p class="muted text-small">Choose their role and stable member handle. They set their own password through a private invitation link that works once.</p>
+        <div class="form-stack spaced">
+          <div class="field">
+            <label class="label" for="inv-email">Email address <span class="req" aria-hidden="true">*</span></label>
+            <input id="inv-email" type="email" placeholder="teammate@company.com" autocomplete="off" />
+            <span class="field-error" id="inv-email-error" hidden><svg class="icon icon-sm"><use href="#i-alert" /></svg><span>Enter a full email address, like sam@company.com.</span></span>
+          </div>
+          <div class="field">
+            <label class="label" for="inv-handle">Member handle <span class="req" aria-hidden="true">*</span></label>
+            <input id="inv-handle" placeholder="e.g. sam" autocomplete="off" />
+            <span class="hint">Letters, numbers, dots, dashes. Keep it consistent with their existing Pi Share actor if they have one.</span>
+            <span class="field-error" id="inv-handle-error" hidden><svg class="icon icon-sm"><use href="#i-alert" /></svg><span>Handles use letters, numbers, dots, or dashes, and start with a letter or number.</span></span>
+          </div>
+          <div class="field">
+            <label class="label" for="inv-role">Role</label>
+            <select id="inv-role">
+              <option value="member">Member — shares setups, reviews activity</option>
+              <option value="admin">Admin — also invites, disables, resets</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="button ghost" type="button" data-close>Cancel</button>
+          <button class="button primary" type="submit">Create invitation link</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Link ready modal (invitation or reset) -->
+    <dialog class="modal narrow" id="modal-link" aria-labelledby="link-title">
+      <div class="drawer-head">
+        <div class="od-stat">
+          <span class="eyebrow" id="link-kind">Invitation</span>
+          <h2 id="link-title">Invitation link ready</h2>
+        </div>
+        <button class="icon-button" type="button" data-close aria-label="Close"><svg class="icon icon-lg"><use href="#i-x" /></svg></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-small muted" id="link-copy">Share this link privately with the intended recipient. It can be used once and expires in 7 days. Copy it now; the server keeps only its hash.</p>
+        <pre class="spaced" id="link-url">https://pi.acme.internal/join#token=pin_7Kq2…redacted</pre>
+        <div class="cmd-actions">
+          <button class="button secondary small" type="button" data-copy="#link-url"><svg class="icon icon-sm"><use href="#i-copy" /></svg>Copy private link</button>
+          <span class="sample-tag">sample link</span>
+        </div>
+        <p class="text-small faint spaced">No email has been sent. Harness connection instructions are available separately under My devices.</p>
+        <div class="modal-actions">
+          <button class="button primary" type="button" data-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Confirm modal (revoke device / role change / disable) -->
+    <dialog class="modal narrow" id="modal-confirm" aria-labelledby="confirm-title">
+      <div class="drawer-head">
+        <div class="od-stat">
+          <span class="eyebrow" id="confirm-eyebrow">Confirm</span>
+          <h2 id="confirm-title">Disconnect this device?</h2>
+        </div>
+        <button class="icon-button" type="button" data-close aria-label="Close"><svg class="icon icon-lg"><use href="#i-x" /></svg></button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-copy"></p>
+        <div class="modal-actions">
+          <button class="button ghost" type="button" data-close>Cancel</button>
+          <button class="button danger" type="button" id="confirm-yes">Revoke device</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"><svg class="icon"><use href="#i-check" /></svg><span id="toast-text"></span></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

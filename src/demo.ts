@@ -46,7 +46,7 @@ export async function startDemoProvider() {
 export async function runDemo(out = resolve(".demo", randomUUID())) {
   const repo = join(out, "fixture"); ensureDir(repo);
   const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
-  git("init", "-q"); git("config", "user.name", "Pi Share Demo"); git("config", "user.email", "demo@example.invalid");
+  git("init", "-q"); git("config", "user.name", "Loadout Demo"); git("config", "user.email", "demo@example.invalid");
   writeFileSync(join(repo, "discount.js"), "export function discount(price, percent) {\n  return price * (1 - percent / 100);\n}\n");
   writeFileSync(join(repo, "caller.js"), "import { discount } from './discount.js';\nexport const salePrice = discount(100, 20);\n");
   writeFileSync(join(repo, "AGENTS.md"), "Percentages are whole numbers between 0 and 100. Review correctness; do not edit code.\n");

@@ -2,3 +2,22 @@ node_modules/
 dist/
 .pi-share/
 .demo/
+.registry/
+*.credential.json
+
+/web/dist/
+
+# Local credentials, registry databases, and machine files
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+*.pem
+*.key
+.DS_Store

@@ -1,0 +1,34 @@
+/* Application aliases over tweakcn's Doom 64 variables. */
+:root {
+  color-scheme: dark;
+  --bg: var(--background);
+  --surface-1: var(--card);
+  --surface-2: var(--muted);
+  --surface-3: color-mix(in oklch, var(--card), var(--foreground) 7%);
+  --surface-hover: color-mix(in oklch, var(--card), var(--foreground) 4%);
+  --border-strong: color-mix(in oklch, var(--border), var(--foreground) 24%);
+  --text: var(--foreground);
+  --text-muted: var(--muted-foreground);
+  --text-faint: color-mix(in oklch, var(--foreground) 72%, var(--background));
+  --action: var(--primary);
+  --action-strong: color-mix(in oklch, var(--primary), white 12%);
+  --action-ink: var(--primary-foreground);
+  --action-soft: color-mix(in oklch, var(--primary) 11%, var(--background));
+  --action-line: color-mix(in oklch, var(--primary) 55%, var(--border));
+  --amber: var(--destructive);
+  --amber-soft: color-mix(in oklch, var(--destructive) 10%, var(--background));
+  --red: color-mix(in oklch, var(--primary), white 20%);
+  --red-soft: var(--action-soft);
+  --green: color-mix(in oklch, var(--secondary), white 15%);
+  --green-soft: color-mix(in oklch, var(--secondary) 10%, var(--background));
+  --focus: var(--accent);
+  --font-ui: var(--font-sans);
+  --fs-base: 14px;
+  --shadow-modal: 12px 12px 0 color-mix(in oklch, var(--background), black 45%);
+  --inset-highlight: inset 0 1px 0 color-mix(in oklch, var(--foreground) 5%, transparent);
+  --t-state: 120ms ease-out;
+  --t-enter: 160ms ease-out;
+  --sidebar-w: 212px;
+  --topbar-h: 54px;
+  --content-max: 1480px;
+}

@@ -1,9 +1,10 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { canonical, digest, jsonRead, jsonWrite, packFile, safePath, unpack, validateFiles, walk } from "./files.js";
+import { canonical, digest, jsonRead, jsonWrite, packFile, rejectSecrets, safePath, unpack, validateFiles, walk } from "./files.js";
 import { PI_VERSION, id, profileBodySchema, profileSchema, settingsSchema, type Profile, type ProfileBody } from "./schema.js";
 import type { Store } from "./store.js";
+import { captureSkill, makeSkillPin, validateSkillPins } from "./skills.js";
 
 export const DEFAULT_REVIEW = "Review the change described in PR.diff against the repository in repo/. Use the provided project instructions and context/. Report actionable defects introduced by this change, with file and line references, impact, and evidence. Avoid speculative findings. Do not modify files. End with a concise review.";
 
@@ -14,6 +15,9 @@ export function assertPinned(source: string) {
 }
 export function sealProfile(raw: ProfileBody): Profile {
   const body = profileBodySchema.parse(raw); validateFiles(body.files); body.packages.forEach(assertPinned);
+  validateSkillPins(body.skillPins ?? [], body.files, body.scope, "pi", body.resources.skills);
+  rejectSecrets("workflow.md", Buffer.from(body.workflow.prompt));
+  rejectSecrets("setup-metadata", Buffer.from(canonical({ ...body, files: [] })));
   const files = new Set(body.files.map(f => f.path));
   for (const path of [...body.instructions, ...(body.systemPrompt ? [body.systemPrompt] : []), ...body.appendSystemPrompt]) {
     safePath(path); if (!files.has(path)) throw new Error(`Missing instruction file: ${path}`);
@@ -28,12 +32,13 @@ export function validateProfile(raw: unknown): Profile {
   if (sealProfile(body).revision !== revision) throw new Error("Profile revision does not match its contents");
   return parsed;
 }
-export function saveProfile(store: Store, profile: Profile): Profile {
+export function saveProfile(store: Store, profile: Profile, alias = profile.name): Profile {
   validateProfile(profile);
+  id.parse(alias);
   if (profile.scope !== store.scope) throw new Error("Profile scope does not match the selected store");
   const path = join(store.dir, "profiles", `${profile.revision}.json`);
   if (!existsSync(path)) jsonWrite(path, profile);
-  jsonWrite(join(store.dir, "names", `${profile.name}.json`), { revision: profile.revision }, true);
+  jsonWrite(join(store.dir, "names", `${alias}.json`), { revision: profile.revision }, true);
   return profile;
 }
 export function getProfile(store: Store, ref: string): Profile {
@@ -48,7 +53,10 @@ export function getProfile(store: Store, ref: string): Profile {
 }
 export function listProfiles(store: Store): Profile[] {
   const dir = join(store.dir, "names");
-  return existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(".json")).sort().map(f => getProfile(store, f.slice(0, -5))) : [];
+  return existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(".json")).sort().flatMap(f => {
+    const ref = jsonRead(join(dir, f)) as { revision: string }; const raw = jsonRead(join(store.dir, "profiles", `${ref.revision}.json`)) as { schemaVersion: number };
+    return raw.schemaVersion === 2 ? [] : [validateProfile(raw)];
+  }) : [];
 }
 export function materializeProfile(profile: Profile, dest: string) { validateProfile(profile); unpack(profile.files, dest); }
 
@@ -85,9 +93,16 @@ export function captureProfile(options: { name: string; scope: "personal" | "wor
   function copy(source: string, target: string): string {
     const path = resolve(source); const existing = copied.get(path); if (existing) return existing;
     const stat = lstatSync(path); if (stat.isSymbolicLink()) throw new Error(`Resolve symlinked resource before capture: ${source}`);
-    const entries = stat.isDirectory() ? walk(path, new Set(["node_modules", ".git", "sessions", "memory"])) : [path];
+    const entries = stat.isDirectory() ? walk(path, new Set(["node_modules", ".git", "sessions", "memory", ".pi-share-skill.json"])) : [path];
     if (!entries.length) return "";
-    for (const file of entries) body.files.push(packFile(stat.isDirectory() ? `${target}/${relative(path, file).split("\\").join("/")}` : target, readFileSync(file), Boolean(lstatSync(file).mode & 0o111)));
+    for (const file of entries) {
+      const packedPath = stat.isDirectory() ? `${target}/${relative(path, file).split("\\").join("/")}` : target;
+      body.files.push(packFile(packedPath, readFileSync(file), Boolean(lstatSync(file).mode & 0o111)));
+      if (basename(file) === "SKILL.md" && existsSync(join(dirname(file), ".pi-share-skill.json"))) {
+        const skill = captureSkill({ dir: dirname(file), scope: body.scope });
+        (body.skillPins ??= []).push(makeSkillPin(skill, dirname(packedPath).split("\\").join("/")));
+      }
+    }
     copied.set(path, target); return target;
   }
   for (const layer of layers) {

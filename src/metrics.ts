@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { digest } from "./files.js";
 import { id, metricsSchema, type Metrics } from "./schema.js";
 
-export type MetricIdentity = Pick<Metrics, "runId" | "comparisonId" | "scope" | "actorId" | "deviceId" | "profileName" | "profileRevision" | "effectiveConfigHash" | "contextHash" | "workflowId" | "mode" | "source" | "piVersion" | "toolPolicy">;
+export type MetricIdentity = Pick<Metrics, "runId" | "comparisonId" | "scope" | "actorId" | "deviceId" | "profileName" | "profileRevision" | "effectiveConfigHash" | "contextHash" | "workflowId" | "mode" | "source" | "piVersion" | "toolPolicy" | "skillPins">;
 type Event = { type: string; [key: string]: any };
 const numeric = (v: unknown): number => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0;
 const toolName = (value: string) => id.safeParse(value).success ? value : `tool-${digest(value).slice(0, 16)}`;

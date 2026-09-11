@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { canonical, ensureDir, jsonRead, jsonWrite } from "./files.js";
-import { analyticsSchema, id, metricsSchema, scope as scopeSchema, type Metrics } from "./schema.js";
+import { analyticsSchema, assessmentSchema, id, metricsSchema, scope as scopeSchema, type Metrics, type Assessment } from "./schema.js";
+import { newAssessment, orderAssessments } from "./assessments.js";
 
 export class Store {
   readonly dir: string;
@@ -18,6 +19,26 @@ export class Store {
     const value = z.object({ actorId: id, deviceId: z.uuid() }).strict().parse(jsonRead(path));
     return { ...value, actorId: actor ? id.parse(actor) : value.actorId };
   }
+  setActor(actorId: string) {
+    const identity = { ...this.identity(), actorId: id.parse(actorId) };
+    jsonWrite(join(this.dir, "identity.json"), identity, true); return identity;
+  }
+  assessments(): Assessment[] {
+    const dir = join(this.dir, "assessments");
+    return existsSync(dir) ? orderAssessments(readdirSync(dir).filter(f => f.endsWith(".json")).map(f => assessmentSchema.parse(jsonRead(join(dir, f))))) : [];
+  }
+  mergeAssessments(events: Assessment[], records = this.records()) {
+    const existing = this.assessments(); const known = new Set(existing.map(e => e.eventId));
+    const runs = new Map(records.map(r => [r.runId, r]));
+    const ordered = orderAssessments([...existing, ...events]);
+    for (const e of ordered) if (runs.get(e.runId)?.status !== "completed") throw new Error("Assessments require a completed run");
+    let added = 0;
+    for (const e of ordered) if (!known.has(e.eventId)) { jsonWrite(join(this.dir, "assessments", `${e.eventId}.json`), e); added++; }
+    return added;
+  }
+  score(runId: string, actorId: string, outcome: NonNullable<Metrics["outcome"]>) {
+    const event = newAssessment(this.assessments(), runId, actorId, outcome); this.mergeAssessments([event]); return event;
+  }
   writeMetrics(raw: unknown, overwrite = false): Metrics {
     const record = metricsSchema.parse(raw);
     if (record.scope !== this.scope) throw new Error("Analytics scope does not match the selected store");
@@ -29,7 +50,7 @@ export class Store {
     return readdirSync(dir).filter(f => f.endsWith(".json")).sort().map(f => metricsSchema.parse(jsonRead(join(dir, f))));
   }
   exportAnalytics(path: string) {
-    const bundle = analyticsSchema.parse({ schemaVersion: 1, scope: this.scope, records: this.records() });
+    const bundle = analyticsSchema.parse({ schemaVersion: 2, scope: this.scope, records: this.records(), assessments: this.assessments() });
     jsonWrite(path, bundle); return bundle.records.length;
   }
   importAnalytics(path: string) {
@@ -42,8 +63,14 @@ export class Store {
       if (previous && previous !== text) throw new Error(`Conflicting record ${record.runId}; imported records never overwrite local results`);
       seen.set(record.runId, text);
     }
+    const events = bundle.schemaVersion === 2 ? bundle.assessments : [];
+    // Validate the complete batch before persisting either its runs or its edit history.
+    const allEvents = orderAssessments([...this.assessments(), ...events]);
+    const allRuns = new Map([...this.records(), ...bundle.records].map(r => [r.runId, r]));
+    for (const e of allEvents) if (allRuns.get(e.runId)?.status !== "completed") throw new Error("Assessments require a completed run");
     let added = 0;
     for (const record of bundle.records) if (!current.has(record.runId)) { this.writeMetrics(record); current.set(record.runId, canonical(record)); added++; }
+    this.mergeAssessments(events);
     return added;
   }
 }

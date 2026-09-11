@@ -1,8 +1,10 @@
-# Pi Share
+# Loadout
 
-A local prototype for sharing Pi setups, collecting workflow metadata, and comparing two setups on the same frozen change. Built against Pi **0.85.1**.
+A workspace for sharing reusable skills and native Pi, Claude Code, and Codex setups, with metadata-only usage analytics. **Version 0.4** adds standalone versioned skills, compatible-harness installation, skill pins, native configuration snapshots, and local telemetry adapters. The controlled review runner uses Pi **0.85.1**. The current product layer adds named local trials, revision inspection/diffs, withdrawal, device renewal and sync health, complete period analytics, and administrative operations.
 
-Profiles and analytics travel as separate JSON exports. Reviews and repository context stay on the machine running the comparison. There is no hosted service or automatic background sync yet.
+Publish a selected setup to your team's registry, pull a colleague's revision under a local alias, and sync metadata between devices. Configuration publishing and analytics sync are separate actions. Reviews and repository context stay on the machine running the comparison. JSON export/import remains available for offline exchange.
+
+Start with **[dashboard and account setup](AUTH.md)**, **[shared skills and native harnesses](SKILLS-AND-HARNESSES.md)**, then **[the team workflow guide](TEAM.md)** for publishing configurations and syncing measurements. The service is self-hosted; this repository does not provision a cloud account.
 
 ## Try it
 
@@ -16,7 +18,19 @@ npm run demo
 
 The demo runs real Pi sessions against a scripted local provider, requires no credentials, and makes no paid model calls. It creates two review profiles, freezes a tiny Git change, runs both profiles, and prints paths to the comparison report and metadata export. Demo records are explicitly labeled and excluded from normal analytics reports.
 
-Use `node dist/cli.js --help` for all commands. Optionally run `npm link` to make the same CLI available as `pi-share`.
+Start the dashboard and create your admin account:
+
+```sh
+npm run dashboard
+```
+
+Open the private URL saved to `.registry/setup-link.txt`, create the first admin, and invite teammates under **Team & access**. The dashboard shows shared skills, native setups, usage, comparisons, and connected devices. **My devices** supplies credential-free instructions you can give to Pi, Claude Code, or Codex; each device requires your browser approval.
+
+Use **What’s shared** on account screens or in the dashboard footer for the sharing disclosure. It also appears in device onboarding and copied harness instructions: reusable setup files and usage metadata are shared with workspace members; session traces and task content are excluded from analytics sync.
+
+Use `node dist/cli.js --help` for all commands. Optionally run `npm link` to make the same CLI available as `loadout` (the `pi-share` command remains an alias).
+
+Loadout was previously called Pi Share. Existing `~/.pi-share` data, workspace names, device credentials, and configuration formats are retained, so current installations keep working. The checkout may still be named `pi-share`.
 
 ## Share your actual review setup
 
@@ -27,7 +41,7 @@ node dist/cli.js profile capture makina-review \
   --scope work --project /path/to/repository \
   --workflow pr-review --prompt /path/to/review-request.md
 
-node dist/cli.js profile show makina-review --scope work
+node dist/cli.js setup inspect makina-review --scope work
 node dist/cli.js profile export makina-review --scope work \
   --out /path/to/exchange/makina-review.profile.json
 ```
@@ -113,7 +127,7 @@ node dist/cli.js analytics import /path/to/exchange/colleague-metrics.json --sco
 node dist/cli.js analytics report --scope work
 ```
 
-Share these explicit exports, rather than the whole store: the store also contains local code packets and final reviews. Imports validate a strict schema, deduplicate identical run IDs, and reject conflicting versions of an existing record. There is no live conflict resolution or team authentication service in this prototype.
+Share these explicit exports, rather than the whole store: the store also contains local code packets and final reviews. Imports validate a strict schema, deduplicate identical run IDs, and reject changes to immutable run data. Version 2 exports also carry the edit history of human assessments; version 1 exports remain readable. The team registry supports the same boundaries through authenticated, incremental synchronization.
 
 | Exported analytics | Deliberately absent |
 | --- | --- |
@@ -141,10 +155,12 @@ node dist/cli.js analytics report --scope work --comparison COMPARISON_UUID
 
 `missed` requires known defects or an adjudicated reference. Lower spend or more skill/tool usage is not a quality score. Compare several representative changes and inspect valid findings, false positives, and missed issues together. The prototype does not automatically declare a winner.
 
-Score before exporting records when possible: changing a score produces a conflicting version if another device already imported the unscored record. Regenerate the analytics report after scoring; the original comparison report is a snapshot.
+Scores are now immutable assessment events attached to a run and reviewer. Editing a score creates a new event that supersedes the locally known versions. Concurrent offline edits remain visible as conflicting versions after sync. Inspect them, then run `score` again to record the resolution. Different reviewers retain independent assessments. Regenerate the analytics report after scoring; the original comparison report is a snapshot. Existing version 1 scores are retained and migrated to assessment events when their owner's metadata is synced.
 
 ## Validation and next boundary
 
 `npm test` exercises profile exchange, credential/trace exclusion, exact context freezing, metadata merging, actual Pi SDK execution across two stores, imported extensions/custom providers, and setup failure reporting. See [VALIDATION.md](VALIDATION.md) for the separate live-model smoke test.
 
-The next product layer would be an authenticated team registry, synchronization and score-version handling, dependency locking, an interactive profile launcher, and instrumentation adapters for subprocess agents. The current package provides the local export/import, measurement, and comparison path needed to test the idea with real teammate profiles first.
+The registry, dashboard, account invitations, browser-approved device login, incremental/watch sync, setup catalogue, namespaced imports, and score edit history are implemented. The dashboard now prepares a named CLI handoff for local trials and tracks synced results and explicit decisions. SSO/MFA, automated email delivery, full transitive dependency locking, and instrumentation adapters for subprocess agents remain future work. See [TEAM.md](TEAM.md) for the current deployment and coverage limits.
+
+See [audit fixes and evidence](AUDIT-FIXES.md) for this implementation pass and [operations](OPERATIONS.md) for deployment checks, quotas, withdrawal, and recovery.

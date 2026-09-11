@@ -1,23 +1,50 @@
 {
-  "name": "pi-share",
-  "version": "0.1.0",
+  "name": "loadout",
+  "version": "0.4.0",
   "private": true,
-  "description": "Portable Pi profiles, metadata-only usage analytics, and local review comparisons",
+  "description": "Shared skills, native Pi/Claude Code/Codex setups, and team usage analytics",
   "type": "module",
-  "bin": { "pi-share": "dist/cli.js" },
-  "exports": { "./extension": "./dist/extension.js" },
-  "pi": { "extensions": ["./dist/extension.js"] },
-  "engines": { "node": ">=22.19.0" },
+  "bin": {
+    "loadout": "dist/cli.js",
+    "pi-share": "dist/cli.js"
+  },
+  "exports": {
+    "./extension": "./dist/extension.js"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/extension.js"
+    ]
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build --config web/vite.config.ts",
+    "check": "tsc --noEmit -p tsconfig.json && tsc -p web/tsconfig.json",
     "test": "npm run build && node --test test/*.test.mjs",
     "start": "node dist/cli.js",
-    "demo": "npm run build && node dist/cli.js demo"
+    "demo": "npm run build && node dist/cli.js demo",
+    "dev:web": "vite --config web/vite.config.ts",
+    "dashboard": "npm run build && node dist/cli.js serve --data .registry --team pi-share --scope work"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
+    "@fontsource/oxanium": "5.3.0",
+    "@fontsource/source-code-pro": "5.3.0",
+    "lucide-react": "0.577.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "smol-toml": "1.8.0",
+    "yaml": "2.9.0",
     "zod": "4.5.4"
   },
-  "devDependencies": { "@types/node": "22.18.6", "typescript": "5.9.3" }
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.1.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
+  }
 }

@@ -32,6 +32,7 @@ export default function extension(pi: ExtensionAPI) {
         const collector = new Collector({
           runId: randomUUID(), comparisonId: null, scope: store.scope, ...store.identity(process.env.PI_SHARE_ACTOR),
           profileName: profile.name, profileRevision: profile.revision, workflowId, mode: "live", source: "extension", piVersion: PI_VERSION, toolPolicy: "profile",
+          ...(profile.skillPins ? { skillPins: profile.skillPins.map(({ name, revision }) => ({ name, revision })) } : {}),
           effectiveConfigHash: digest(canonical({ profile: profile.revision, system: ctx.getSystemPrompt(), tools: pi.getAllTools(), active: pi.getActiveTools(), model: ctx.model })),
           // Hash only: conversation contents are not written or exported by pi-share.
           contextHash: digest(canonical(ctx.sessionManager.getBranch())),
