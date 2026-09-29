@@ -1,5 +1,5 @@
 import { OverviewNext } from "./OverviewNext";
-import { go, useLocation, useParam } from "./navigation";
+import { go, setupPageRef, useLocation, useParam } from "./navigation";
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import {
   Activity,
@@ -7,6 +7,7 @@ import {
   BarChart3,
   Box,
   Code2,
+  ContactRound,
   Cpu,
   GitCompareArrows,
   Layers,
@@ -39,15 +40,17 @@ import {
 import { flushSync } from "react-dom";
 import { registerDashboardTools } from "./agent-tools";
 import { SharingLink } from "./Sharing";
-import { Setups, Skills } from "./Library";
+import { Setups, SetupPage, Skills } from "./Library";
 import loadoutMark from "./assets/loadout.svg";
 import { harnessLabels } from "../src/schema";
 import { ActivityView, Comparisons, Devices, TeamAccess } from "./Views";
+import { People } from "./People";
 
 const routes = [
   { path: "/", label: "Overview", icon: BarChart3 },
   { path: "/setups", label: "Shared setups", icon: Layers },
   { path: "/skills", label: "Shared skills", icon: Sparkles },
+  { path: "/people", label: "People", icon: ContactRound },
   { path: "/activity", label: "Activity", icon: Activity },
   { path: "/comparisons", label: "Comparisons", icon: GitCompareArrows },
   { path: "/devices", label: "My devices", icon: Monitor },
@@ -349,6 +352,7 @@ export default function App() {
   const [error, setError] = useState("");
   const locationKey = useLocation();
   const path = locationKey.split("?")[0];
+  const setupPage = setupPageRef(path);
   const [token] = useState(
     () => new URLSearchParams(location.hash.slice(1)).get("token") ?? "",
   );
@@ -451,13 +455,15 @@ export default function App() {
         path={path}
         token={token}
         onAuth={() => {
-          if (path !== "/devices") navigate("/");
+          if (["/login", "/setup", "/join", "/reset"].includes(path))
+            navigate("/");
           void loadSession();
         }}
       />
     );
   const user = session.user;
-  const active = routes.find((r) => r.path === path) ?? routes[0];
+  const activePath = setupPage ? "/setups" : path;
+  const active = routes.find((route) => route.path === activePath) ?? routes[0];
   const logout = () =>
     api("/auth/logout", {})
       .then(() => {
@@ -550,28 +556,38 @@ export default function App() {
                   ? "TEAM LIBRARY"
                   : active.path === "/comparisons"
                     ? "EXPERIMENTS"
-                    : ["/devices", "/team"].includes(active.path)
+                    : ["/people", "/devices", "/team"].includes(active.path)
                       ? "WORKSPACE"
                       : "TEAM ACTIVITY"}
               </span>
-              <h1>{active.path === "/" ? "Overview" : active.label}</h1>
+              <h1>
+                {setupPage
+                  ? `${setupPage.owner} / ${setupPage.name}`
+                  : active.path === "/"
+                    ? "Overview"
+                    : active.label}
+              </h1>
               <p className="muted">
-                {active.path === "/"
-                  ? "How your team’s harnesses run. Discover the setups behind the work."
-                  : active.path === "/setups"
-                    ? "Your team’s configurations. Versioned, inspectable, ready to run."
+                {setupPage
+                  ? `Pinned setup revision ${short(setupPage.revision)}. Inspect its contents before running it locally.`
+                  : active.path === "/"
+                    ? "How your team’s harnesses run. Discover the setups behind the work."
+                    : active.path === "/setups"
+                      ? "Your team’s configurations. Versioned, inspectable, ready to run."
                     : active.path === "/skills"
                       ? "Borrow a useful skill. Keep the setup that works for you."
-                      : active.path === "/activity"
-                        ? "What ran, which tools it used, and what it cost."
-                        : active.path === "/comparisons"
+                      : active.path === "/people"
+                        ? "Find teammates by name, job title, or company team."
+                        : active.path === "/activity"
+                          ? "What ran, which tools it used, and what it cost."
+                          : active.path === "/comparisons"
                           ? "Try a teammate’s setup locally, compare the evidence, and record what to keep."
                           : active.path === "/devices"
                             ? "Connect your harnesses without sharing account passwords."
                             : "Invite teammates and manage who can access this workspace."}
               </p>
             </div>
-            {["/setups", "/skills"].includes(active.path) && data ? (
+            {!setupPage && ["/setups", "/skills"].includes(active.path) && data ? (
               <div className="heading-readout">
                 <div>
                   <strong>
@@ -603,7 +619,7 @@ export default function App() {
             ) : null}
           </div>
           <ErrorBox error={error} />
-          {!["/devices", "/team", "/setups"].includes(active.path) && (
+          {!["/people", "/devices", "/team", "/setups"].includes(active.path) && (
             <div className="toolbar">
               <div
                 className="segmented"
@@ -673,7 +689,8 @@ export default function App() {
               </div>
             </div>
           )}
-          {mode === "demo" && !["/devices", "/team"].includes(active.path) && (
+          {mode === "demo" &&
+            !["/people", "/devices", "/team"].includes(active.path) && (
             <div className="notice">
               Demo measurements are isolated from live activity. They do not
               indicate real model quality or spend.
@@ -689,6 +706,8 @@ export default function App() {
                   : "Activity unavailable. Try refreshing."}
               </div>
             )
+          ) : active.path === "/people" ? (
+            <People user={user} />
           ) : active.path === "/devices" ? (
             <Devices team={session.team} />
           ) : active.path === "/team" ? (
@@ -699,7 +718,17 @@ export default function App() {
             )
           ) : data ? (
             active.path === "/setups" ? (
-              <Setups data={data} refresh={refresh} user={user} />
+              setupPage ? (
+                <SetupPage
+                  key={`${setupPage.owner}/${setupPage.name}/${setupPage.revision}`}
+                  reference={setupPage}
+                  data={data}
+                  refresh={refresh}
+                  user={user}
+                />
+              ) : (
+                <Setups data={data} refresh={refresh} user={user} />
+              )
             ) : active.path === "/skills" ? (
               <Skills data={data} refresh={refresh} user={user} />
             ) : active.path === "/activity" ? (

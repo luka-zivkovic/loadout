@@ -156,7 +156,7 @@ td .text-button { font-weight: 600; font-size: 13px; }
 .modal > .panel-heading h2 { font-size: 17px; }
 .modal-body { padding: 24px; }
 .modal pre, .code-block { border-left: 2px solid var(--border-strong); font-size: 11px; line-height: 1.9; }
-.drawer-backdrop .modal { width: min(640px,100%); border-left: 1px solid var(--border-strong); border-top: 3px solid var(--primary); }
+.drawer-backdrop .modal { width: min(760px,100%); border-left: 1px solid var(--border-strong); border-top: 3px solid var(--primary); }
 .detail-grid { gap: 20px; background: var(--background); }
 .detail-grid dt { font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
 .detail-grid dd { font-size: 15px; }

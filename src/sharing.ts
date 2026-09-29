@@ -17,7 +17,7 @@ export const sharingDisclosure = {
     },
     {
       title: "Workspace access",
-      body: "Published setups and synced measurements are visible to workspace members. The workspace also stores your account name, email, and device label; the default device label is your computer’s name. Admins can inspect access/device records and administrative events.",
+      body: "Published setups and synced measurements are visible to workspace members. All active members can see account names, member handles, and optional job titles and company teams in the People directory. The workspace also stores your email and device label; the default device label is your computer’s name. Admins can inspect access/device records and administrative events.",
     },
   ],
   controls:

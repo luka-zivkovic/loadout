@@ -14,6 +14,7 @@ import { TeamError } from "./team-protocol.js";
 import {
   WebAuth,
   emailSchema,
+  memberProfileSchema,
   passwordSchema,
   personSchema,
   roleSchema,
@@ -25,8 +26,18 @@ import { clientAddress } from "./proxy.js";
 
 const shortToken = z.string().max(100);
 const userCode = z.string().regex(/^[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5}$/);
+function parseUrl(value: string, message: string) {
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(message);
+  }
+}
 export function publicOrigin(value: string) {
-  const url = new URL(value);
+  const url = parseUrl(
+    value,
+    "--public-url must be the dashboard's origin, without credentials or a path",
+  );
   if (
     url.username ||
     url.password ||
@@ -98,7 +109,10 @@ export function createWebHandler(
     if (!api && !deviceRoute && (path.startsWith("/v1/") || path === "/health"))
       return false;
     const origin = options.origin();
-    if (req.headers.host !== new URL(origin).host)
+    if (
+      req.headers.host !==
+      parseUrl(origin, "The configured dashboard address is invalid.").host
+    )
       throw new TeamError(
         403,
         "invalid_host",
@@ -275,7 +289,7 @@ export function createWebHandler(
         json(res, 200, {
           skill: {
             ...skill,
-            files: skill.files.map(({ data, ...file }) => file),
+            files: skill.files.map(({ data: _data, ...file }) => file),
           },
           instructions: Buffer.from(
             skill.files.find((f) => f.path === "SKILL.md")!.data,
@@ -293,7 +307,7 @@ export function createWebHandler(
         json(res, 200, {
           profile: {
             ...profile,
-            files: profile.files.map(({ data, ...file }) => file),
+            files: profile.files.map(({ data: _data, ...file }) => file),
           },
         });
         return true;
@@ -322,6 +336,33 @@ export function createWebHandler(
         json(res, 200, {
           instructions: registrationInstructions(registry, origin),
         });
+        return true;
+      }
+      if (req.method === "GET" && path === "/api/people") {
+        const people = auth.people();
+        json(res, 200, {
+          people,
+          teams: [
+            ...new Set(
+              people.flatMap((person) =>
+                person.companyTeam ? [person.companyTeam] : [],
+              ),
+            ),
+          ].sort((a, b) => a.localeCompare(b)),
+        });
+        return true;
+      }
+      if (req.method === "POST" && path === "/api/profile") {
+        const user = auth.updateProfile(
+          session.user,
+          memberProfileSchema.strict().parse(inputBody),
+        );
+        registry.ops.audit(
+          session.user.actorId,
+          "member.profile.updated",
+          session.user.actorId,
+        );
+        json(res, 200, { user });
         return true;
       }
       if (req.method === "GET" && path === "/api/devices") {
@@ -450,12 +491,17 @@ export function createWebHandler(
       "/reset",
       "/setups",
       "/skills",
+      "/people",
       "/activity",
       "/comparisons",
       "/devices",
       "/team",
     ];
-    let file = pages.includes(path)
+    const setupPage =
+      /^\/setups\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/[a-f0-9]{64}$/.test(
+        path,
+      );
+    let file = pages.includes(path) || setupPage
       ? join(options.webRoot, "index.html")
       : path.startsWith("/assets/")
         ? resolve(options.webRoot, `.${decodeURIComponent(path)}`)

@@ -1,7 +1,8 @@
+import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ProfileListing, SkillListing } from "../src/team-protocol";
-import { api, Copy, date, ErrorBox, Field, Modal, short } from "./shared";
-import { useParam, go, artifactUrl } from "./navigation";
+import { api, Copy, date, ErrorBox, Modal, short } from "./shared";
+import { useParam, go, artifactUrl, setParam } from "./navigation";
 
 type Ref = { owner: string; name: string; revision: string };
 export const refKey = (ref: Ref) => `${ref.owner}/${ref.name}/${ref.revision}`;
@@ -11,7 +12,8 @@ export function useArtifactSelection<T extends Ref>(
   kind: "profile" | "skill",
   listings: T[],
 ) {
-  const [key, setKey] = useParam(kind === "profile" ? "setup" : "skill");
+  const parameter = kind === "profile" ? "setup" : "skill";
+  const [key, setKey] = useParam(parameter);
   const [loaded, setLoaded] = useState<T | null>(null);
   const [error, setError] = useState("");
   const current = listings.find((p) => refKey(p) === key);
@@ -43,7 +45,8 @@ export function useArtifactSelection<T extends Ref>(
     chosen: key
       ? (current ?? (loaded && refKey(loaded) === key ? loaded : null))
       : null,
-    setChosen: (ref: T | null) => setKey(ref ? refKey(ref) : null),
+    setChosen: (ref: T | null) =>
+      ref ? setKey(refKey(ref)) : setParam(parameter, null, true),
     selectionError: error,
   };
 }
@@ -109,6 +112,18 @@ type FileContent = {
   binary: boolean;
   truncated: boolean;
 };
+function fileGroup(path: string) {
+  const [root, packageName] = path.split("/");
+  if (!root || !path.includes("/")) return "Root";
+  if (root === "shared-skills" && packageName)
+    return `${root}/${packageName}`;
+  return root;
+}
+function fileLabel(path: string, group: string) {
+  if (group === "Root") return path;
+  const prefix = `${group}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+}
 export function FileBrowser({
   kind,
   listing,
@@ -121,6 +136,7 @@ export function FileBrowser({
   before?: Ref | null;
 }) {
   const [selected, setSelected] = useState(files[0]?.path ?? "");
+  const [query, setQuery] = useState("");
   const [content, setContent] = useState<FileContent | null>(null);
   const [previous, setPrevious] = useState<FileContent | null>(null);
   const [beforeFiles, setBeforeFiles] = useState<FileInfo[] | null>(null);
@@ -149,6 +165,20 @@ export function FileBrowser({
     ...(beforeFiles ?? []).filter(
       (f) => !files.some((current) => current.path === f.path),
     ),
+  ];
+  const visibleFiles = allFiles.filter((file) =>
+    file.path.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
+  const groupedFiles = [
+    ...visibleFiles
+      .reduce((groups, file) => {
+        const group = fileGroup(file.path);
+        const entries = groups.get(group) ?? [];
+        entries.push(file);
+        groups.set(group, entries);
+        return groups;
+      }, new Map<string, FileInfo[]>())
+      .entries(),
   ];
   const removed = !files.some((f) => f.path === selected);
   const added = Boolean(
@@ -195,33 +225,64 @@ export function FileBrowser({
   }, [selected, refKey(listing), before ? refKey(before) : "", beforeFiles]);
   return (
     <section className="artifact-files">
-      <h3 className="section-title">Included contents</h3>
-      <p className="text-small muted">
-        Plain-text previews. Scripts and hooks are displayed without executing
-        them.
-      </p>
+      <div className="artifact-files-heading">
+        <div>
+          <h3 className="section-title">
+            Included contents <span className="badge">{allFiles.length}</span>
+          </h3>
+          <p className="text-small muted">
+            Grouped by configuration area. Scripts and hooks are displayed
+            without executing them.
+          </p>
+        </div>
+        <label className="file-filter">
+          <span className="sr-only">Filter included files</span>
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter files"
+            autoComplete="off"
+          />
+        </label>
+      </div>
       <div className="file-browser">
         <div className="file-list" role="group" aria-label="Included files">
-          {allFiles.map((f) => (
-            <button
-              type="button"
-              key={f.path}
-              className={selected === f.path ? "selected" : ""}
-              onClick={() => setSelected(f.path)}
-              aria-pressed={selected === f.path}
-            >
-              <code>{f.path}</code>
-              {f.executable && <span className="badge amber">Executable</span>}
-              {beforeFiles &&
-                !files.some((current) => current.path === f.path) && (
-                  <span className="badge red">Removed</span>
-                )}
-              {beforeFiles &&
-                !beforeFiles.some((old) => old.path === f.path) && (
-                  <span className="badge green">Added</span>
-                )}
-            </button>
+          {groupedFiles.map(([group, entries]) => (
+            <div className="file-group" key={group}>
+              <div className="file-group-heading">
+                <code>{group}</code>
+                <span>{entries.length}</span>
+              </div>
+              {entries.map((file) => (
+                <button
+                  type="button"
+                  key={file.path}
+                  className={selected === file.path ? "selected" : ""}
+                  onClick={() => setSelected(file.path)}
+                  aria-pressed={selected === file.path}
+                  title={file.path}
+                >
+                  <code>{fileLabel(file.path, group)}</code>
+                  {file.executable && (
+                    <span className="badge amber">Executable</span>
+                  )}
+                  {beforeFiles &&
+                    !files.some((current) => current.path === file.path) && (
+                      <span className="badge red">Removed</span>
+                    )}
+                  {beforeFiles &&
+                    !beforeFiles.some((old) => old.path === file.path) && (
+                      <span className="badge green">Added</span>
+                    )}
+                </button>
+              ))}
+            </div>
           ))}
+          {!visibleFiles.length && (
+            <p className="file-list-empty">No files match this filter.</p>
+          )}
         </div>
         <div className="file-preview">
           <ErrorBox error={error || beforeError} />
@@ -266,6 +327,8 @@ export function ArtifactControls({
   close,
   onCompareRevision,
   comparing = false,
+  copyUrl,
+  historyUrl,
 }: {
   kind: "profile" | "skill";
   listing: Ref;
@@ -274,6 +337,8 @@ export function ArtifactControls({
   close: () => void;
   onCompareRevision?: (ref: Ref | null) => void;
   comparing?: boolean;
+  copyUrl?: string;
+  historyUrl?: (ref: Ref) => string;
 }) {
   const [history, setHistory] = useState<
     ((ProfileListing | SkillListing) & {
@@ -301,7 +366,10 @@ export function ArtifactControls({
     <>
       <div className="artifact-actions">
         <Copy
-          text={new URL(artifactUrl(kind, listing), location.origin).href}
+          text={
+            copyUrl ??
+            new URL(artifactUrl(kind, listing), location.origin).href
+          }
           label="Copy revision link"
         />
         {canWithdraw &&
@@ -326,7 +394,9 @@ export function ArtifactControls({
               <button
                 type="button"
                 className="text-button"
-                onClick={() => go(artifactUrl(kind, p))}
+                onClick={() =>
+                  go(historyUrl ? historyUrl(p) : artifactUrl(kind, p))
+                }
               >
                 {short(p.revision)}
               </button>

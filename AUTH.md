@@ -40,7 +40,7 @@ Email is an account identifier here. Delivery is manual; Loadout does not verify
 
 Admins can invite members/admins, change roles, disable/re-enable accounts, and issue password reset links. At least one active admin must remain. Disabling an account revokes its sessions and all its device credentials, including v0.2 operator-issued credentials for the same handle. Re-enabling it does not reactivate old credentials. Demoting an admin also invalidates its sessions, device credentials, and unconsumed links it issued.
 
-All active members can read shared configurations and measurements in this installation. Setup publishing, run ownership, and reviewer identity are still enforced by the registry. Admin browser accounts and device credentials are separate: possessing a CLI token does not grant browser administration.
+All active members can read shared configurations and measurements in this installation. They can also browse member names, handles, optional job titles, and optional company teams in **People**. Each member controls their own optional profile fields; account email and access controls remain admin-only. Setup publishing, run ownership, and reviewer identity are still enforced by the registry. Admin browser accounts and device credentials are separate: possessing a CLI token does not grant browser administration.
 
 ## Connect Pi on any device
 
@@ -71,6 +71,7 @@ The flow is inspired by the [OAuth device authorization grant](https://www.rfc-e
 
 - **Overview:** latest shared revisions, device/sync status, pending trials, then complete period totals and tool usage grouped by harness.
 - **Shared setups and skills:** pinned links, revision history, plain-text supporting-file inspection, content differences, requirements, explicit local handoff, and owner/admin withdrawal. Skill usage has an explicit all-harness scope and structured usefulness feedback.
+- **People:** an active-member directory searchable by name, handle, optional job title, or optional company team. Members maintain only their own profile fields.
 - **Activity:** server-paginated runs, visible search/member/workflow/harness filters, metadata coverage, stable run links, human assessments, and selection of 2–4 runs for inspection.
 - **Comparisons:** named setup trials, compatible revision selection (including the candidate's available history), local CLI instructions, full experiment results, assessments, and an explicit decision. Pi trials use one frozen packet; native trials remain usage observations.
 - **My devices:** authorization and last successful sync are separate. Source checks and collector state are reports at the last sync, not a live heartbeat. Connection instructions open on demand.

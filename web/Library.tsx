@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   Check,
   Code2,
+  Maximize2,
   Plus,
   Search,
   RefreshCw,
@@ -36,7 +38,13 @@ import {
   useArtifactSelection,
   refKey,
 } from "./Artifacts";
-import { go, useParam, artifactUrl } from "./navigation";
+import {
+  go,
+  useParam,
+  artifactUrl,
+  setupPageUrl,
+  type ArtifactRef,
+} from "./navigation";
 import type { AnalyticsSummary } from "../src/analytics";
 
 type Preview<T extends { files: { data: string }[] }> = Omit<T, "files"> & {
@@ -372,9 +380,15 @@ function SetupDetail({
   user,
   refresh,
   close,
-}: LibraryProps & { listing: ProfileListing; close: () => void }) {
+  presentation = "drawer",
+}: LibraryProps & {
+  listing: ProfileListing;
+  close: () => void;
+  presentation?: "drawer" | "page";
+}) {
   const [profile, setProfile] = useState<SetupPreview | null>(null);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const [previous, setPrevious] = useState<{
     owner: string;
     name: string;
@@ -382,6 +396,8 @@ function SetupDetail({
   } | null>(null);
   useEffect(() => {
     let live = true;
+    setError("");
+    setProfile(null);
     api(
       `/setups/${encodeURIComponent(listing.owner)}/${encodeURIComponent(listing.name)}/${listing.revision}`,
     )
@@ -394,17 +410,17 @@ function SetupDetail({
     return () => {
       live = false;
     };
-  }, [refKey(listing)]);
+  }, [refKey(listing), attempt]);
   const harness = listing.harness?.kind ?? "pi";
   const alias = `setup-${short(listing.revision)}`;
   const commands = `loadout team pull ${data.team.teamName} ${listing.owner}/${listing.name} --scope ${data.team.scope} --revision ${listing.revision} --as ${alias}\nloadout setup inspect ${alias} --scope ${data.team.scope}\n${harness === "pi" ? `loadout run ${alias} --scope ${data.team.scope} --packet /path/to/frozen-review` : `loadout setup materialize ${alias} --scope ${data.team.scope} --out /path/to/new-config-directory`}`;
-  return (
-    <Modal
-      title={`${listing.owner} / ${listing.name}`}
-      close={close}
-      variant="drawer"
+  const detail = (
+    <div
+      className={`setup-detail-content ${
+        presentation === "drawer" ? "modal-body" : "setup-detail-page-body"
+      }`}
     >
-      <div className="modal-body">
+      <div className="setup-detail-toolbar">
         <div className="tag-list">
           <span className="badge">
             <HarnessLabel harness={harness} />{" "}
@@ -416,17 +432,55 @@ function SetupDetail({
           </span>
           <code title={listing.revision}>{short(listing.revision)}</code>
         </div>
-        <ErrorBox error={error} />
-        <ArtifactControls
-          kind="profile"
-          listing={listing}
-          canWithdraw={user.role === "admin" || user.actorId === listing.owner}
-          refresh={refresh}
-          close={close}
-          onCompareRevision={setPrevious}
-          comparing={Boolean(previous)}
-        />
-        {profile && (
+        {presentation === "drawer" && (
+          <button
+            className="button"
+            onClick={() => {
+              const search = new URLSearchParams(location.search);
+              search.delete("setup");
+              go(setupPageUrl(listing), false, {
+                returnTo: `/setups${search.size ? `?${search.toString()}` : ""}`,
+              });
+              window.scrollTo(0, 0);
+            }}
+          >
+            <Maximize2 size={15} aria-hidden="true" />
+            Open full page
+          </button>
+        )}
+      </div>
+      <ErrorBox error={error} />
+      {error && (
+        <button
+          className="button"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          Retry setup details
+        </button>
+      )}
+      {!profile && !error && (
+        <p className="muted setup-detail-loading">Loading setup details…</p>
+      )}
+      <ArtifactControls
+        kind="profile"
+        listing={listing}
+        canWithdraw={user.role === "admin" || user.actorId === listing.owner}
+        refresh={refresh}
+        close={close}
+        onCompareRevision={setPrevious}
+        comparing={Boolean(previous)}
+        copyUrl={`${location.origin}${setupPageUrl(listing)}`}
+        historyUrl={
+          presentation === "page"
+            ? setupPageUrl
+            : (revision) => {
+                const search = new URLSearchParams(location.search);
+                search.set("setup", refKey(revision));
+                return `/setups?${search.toString()}`;
+              }
+        }
+      />
+      {profile && (
           <>
             <p className="setup-description spaced">
               {profile.workflow.prompt}
@@ -536,11 +590,105 @@ function SetupDetail({
               )}
             </details>
           </>
-        )}
-      </div>
+      )}
+    </div>
+  );
+  return presentation === "drawer" ? (
+    <Modal
+      title={`${listing.owner} / ${listing.name}`}
+      close={close}
+      variant="drawer"
+    >
+      {detail}
     </Modal>
+  ) : (
+    detail
   );
 }
+
+export function SetupPage({
+  reference,
+  data,
+  refresh,
+  user,
+}: LibraryProps & { reference: ArtifactRef }) {
+  const current = data.profiles.find(
+    (listing) => refKey(listing) === refKey(reference),
+  );
+  const [listing, setListing] = useState<ProfileListing | null>(current ?? null);
+  const [error, setError] = useState("");
+  const returnTo =
+    typeof history.state?.returnTo === "string" &&
+    /^\/setups(?:\?|$)/.test(history.state.returnTo)
+      ? history.state.returnTo
+      : "/setups";
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setError("");
+    setListing(current ?? null);
+    if (!current)
+      api(
+        `/artifacts/profile/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.name)}/history`,
+      )
+        .then((response) => {
+          if (!live) return;
+          const found = response.history.find(
+            (candidate: ProfileListing) =>
+              candidate.revision === reference.revision,
+          );
+          if (found) setListing(found);
+          else setError("This setup revision could not be found.");
+        })
+        .catch((caught) => {
+          if (live) setError(caught.message);
+        });
+    return () => {
+      live = false;
+    };
+  }, [refKey(reference), Boolean(current), attempt]);
+  return (
+    <section className="setup-detail-page" aria-label="Setup revision details">
+      <div className="setup-detail-page-navigation">
+        <a
+          className="text-button"
+          href="/setups"
+          onClick={(event) => {
+            event.preventDefault();
+            go(returnTo);
+          }}
+        >
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back to shared setups
+        </a>
+      </div>
+      {listing ? (
+        <SetupDetail
+          key={refKey(listing)}
+          listing={listing}
+          data={data}
+          user={user}
+          refresh={refresh}
+          close={() => go(returnTo)}
+          presentation="page"
+        />
+      ) : error ? (
+        <div className="panel setup-detail-state">
+          <ErrorBox error={error} />
+          <button
+            className="button"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="panel loading">Loading setup revision…</div>
+      )}
+    </section>
+  );
+}
+
 export function Skills({ data, refresh, user }: LibraryProps) {
   const [query, setQuery] = useParam("search");
   const [harness, setHarness] = useParam("catalog-harness");

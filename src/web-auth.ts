@@ -19,15 +19,30 @@ export const personSchema = z.object({
   email: emailSchema,
   actorId: id,
 });
+const optionalProfileText = z
+  .string()
+  .trim()
+  .max(100)
+  .transform((value) => value || null);
+export const memberProfileSchema = z.object({
+  jobTitle: optionalProfileText,
+  companyTeam: optionalProfileText,
+});
 export type WebUser = {
   userId: string;
   actorId: string;
   email: string;
   name: string;
+  jobTitle: string | null;
+  companyTeam: string | null;
   role: "admin" | "member";
   disabledAt: string | null;
   createdAt: string;
 };
+export type PublicPerson = Pick<
+  WebUser,
+  "actorId" | "name" | "jobTitle" | "companyTeam"
+>;
 const token = (prefix: SecretPrefix) =>
   `${prefix}_${randomBytes(32).toString("hex")}`;
 const now = () => new Date().toISOString();
@@ -37,13 +52,21 @@ const deny = (status: number, code: string, message: string): never => {
 };
 const equal = (a: string, b: string) =>
   timingSafeEqual(Buffer.from(digest(a), "hex"), Buffer.from(digest(b), "hex"));
+function storedJson(value: unknown) {
+  if (!value) return null;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
 
 export function migrateWebAuth(db: DatabaseSync) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS web_users (
       user_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','member')),
-      disabled_at TEXT, created_at TEXT NOT NULL
+      job_title TEXT, company_team TEXT, disabled_at TEXT, created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS web_sessions (
       session_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES web_users(user_id), csrf TEXT NOT NULL, expires_at TEXT NOT NULL
@@ -67,6 +90,15 @@ export function migrateWebAuth(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_tokens_actor ON tokens(actor_id);
     CREATE TABLE IF NOT EXISTS web_rate_limits (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, until_ms INTEGER NOT NULL);
   `);
+  // SAFETY: SQLite's PRAGMA table_info always returns rows with a string name.
+  const tableInfo = db.prepare("PRAGMA table_info(web_users)").all() as unknown as {
+    name: string;
+  }[];
+  const columns = new Set(tableInfo.map((column) => column.name));
+  if (!columns.has("job_title"))
+    db.exec("ALTER TABLE web_users ADD COLUMN job_title TEXT");
+  if (!columns.has("company_team"))
+    db.exec("ALTER TABLE web_users ADD COLUMN company_team TEXT");
 }
 
 let hashJobs = 0;
@@ -158,16 +190,47 @@ export class WebAuth {
       .run(at - 86_400_000);
   }
   users(): WebUser[] {
+    // SAFETY: The query aliases every selected column to the WebUser keys.
     return this.db
       .prepare(
-        "SELECT user_id AS userId,actor_id AS actorId,email,name,role,disabled_at AS disabledAt,created_at AS createdAt FROM web_users ORDER BY created_at",
+        "SELECT user_id AS userId,actor_id AS actorId,email,name,job_title AS jobTitle,company_team AS companyTeam,role,disabled_at AS disabledAt,created_at AS createdAt FROM web_users ORDER BY created_at",
       )
       .all() as unknown as WebUser[];
   }
+  people(): PublicPerson[] {
+    // SAFETY: The query aliases every selected column to the PublicPerson keys.
+    return this.db
+      .prepare(
+        "SELECT actor_id AS actorId,name,job_title AS jobTitle,company_team AS companyTeam FROM web_users WHERE disabled_at IS NULL ORDER BY name COLLATE NOCASE,actor_id COLLATE NOCASE",
+      )
+      .all() as unknown as PublicPerson[];
+  }
+  updateProfile(
+    user: WebUser,
+    input: z.infer<typeof memberProfileSchema>,
+  ): WebUser {
+    let companyTeam = input.companyTeam;
+    if (companyTeam) {
+      // SAFETY: The query returns only a nullable companyTeam string.
+      const existing = this.db
+        .prepare(
+          "SELECT company_team AS companyTeam FROM web_users WHERE company_team=? COLLATE NOCASE LIMIT 1",
+        )
+        .get(companyTeam) as { companyTeam: string } | undefined;
+      companyTeam = existing?.companyTeam ?? companyTeam;
+    }
+    this.db
+      .prepare(
+        "UPDATE web_users SET job_title=?,company_team=? WHERE user_id=?",
+      )
+      .run(input.jobTitle, companyTeam, user.userId);
+    return this.user(user.userId);
+  }
   private user(userId: string): WebUser {
+    // SAFETY: The query aliases every selected column to the WebUser keys.
     const row = this.db
       .prepare(
-        "SELECT user_id AS userId,actor_id AS actorId,email,name,role,disabled_at AS disabledAt,created_at AS createdAt FROM web_users WHERE user_id=?",
+        "SELECT user_id AS userId,actor_id AS actorId,email,name,job_title AS jobTitle,company_team AS companyTeam,role,disabled_at AS disabledAt,created_at AS createdAt FROM web_users WHERE user_id=?",
       )
       .get(userId) as unknown as WebUser | undefined;
     if (!row || row.disabledAt)
@@ -647,7 +710,7 @@ export class WebAuth {
       .all(user.actorId)
       .map(({ syncBody, ...row }) => ({
         ...row,
-        sync: syncBody ? JSON.parse(String(syncBody)) : null,
+        sync: storedJson(syncBody),
       }));
   }
   revokeDevice(user: WebUser, tokenId: string) {

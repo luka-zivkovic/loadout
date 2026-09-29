@@ -67,11 +67,11 @@ Claude Code and Codex measurements describe observed usage. They don't establish
 
 Workspace members can see the setup revisions and skills you publish, plus the measurements you sync.
 
-| Shared with the workspace                                                                           | Excluded from analytics sync                                    |
-| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Selected configuration files, reusable instructions, skill files, hooks, and extensions you publish | Conversations, reasoning, and session traces                    |
-| Member/device identifiers, workflow labels, timestamps, and setup revisions                         | Task prompts, source code, diffs, and context documents         |
-| Model, tool, and skill names; usage counters; available cost estimates; human assessments           | Raw tool inputs and outputs, credentials, and generated reviews |
+| Shared with the workspace | Excluded from analytics sync |
+| --- | --- |
+| Selected configuration files, reusable instructions, skill files, hooks, and extensions you publish | Conversations, reasoning, and session traces |
+| Member profiles (name, handle, optional job title and company team), device identifiers, workflow labels, timestamps, and setup revisions | Task prompts, source code, diffs, and context documents |
+| Model, tool, and skill names; usage counters; available cost estimates; human assessments | Raw tool inputs and outputs, credentials, and generated reviews |
 
 Reusable files are intentionally shared content. Review them before publishing: credential filtering is best effort, and instructions or scripts can contain private information. Work and personal stores are separate, but the scope doesn't scrub file contents or choose your model account.
 

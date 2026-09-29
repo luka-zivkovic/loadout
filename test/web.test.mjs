@@ -7,8 +7,9 @@ import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
+import { DatabaseSync } from "node:sqlite";
 import { Registry, serveRegistry } from "../dist/registry.js";
-import { WebAuth } from "../dist/web-auth.js";
+import { WebAuth, migrateWebAuth } from "../dist/web-auth.js";
 import { publicOrigin, registrationInstructions } from "../dist/web-server.js";
 import { connectTeam, TeamClient } from "../dist/team-client.js";
 import { Store } from "../dist/store.js";
@@ -160,6 +161,108 @@ const outcome = {
   missedKnownIssues: 0,
   evaluator: "human",
 };
+
+test("web auth migration adds optional people-directory profile fields", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`
+    CREATE TABLE tokens (token_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL);
+    CREATE TABLE web_users (
+      user_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL,
+      password_hash TEXT NOT NULL, role TEXT NOT NULL,
+      disabled_at TEXT, created_at TEXT NOT NULL
+    );
+  `);
+  migrateWebAuth(db);
+  const columns = db
+    .prepare("PRAGMA table_info(web_users)")
+    .all()
+    .map((column) => column.name);
+  assert(columns.includes("job_title"));
+  assert(columns.includes("company_team"));
+  db.close();
+});
+
+test("members maintain their own profile and discover active colleagues", async (t) => {
+  const f = await fixture(t);
+  const admin = await f.firstAdmin();
+  const member = await f.member(admin, "sam");
+  const colleague = await f.member(admin, "alex");
+
+  assert.equal((await f.call("/api/people")).status, 401);
+  assert.equal(
+    (
+      await f.call(
+        "/api/profile",
+        {
+          jobTitle: " Staff engineer ",
+          companyTeam: " Platform ",
+          userId: admin.user.userId,
+        },
+        member,
+      )
+    ).status,
+    400,
+  );
+
+  const updated = await f.call(
+    "/api/profile",
+    { jobTitle: " Staff engineer ", companyTeam: " Platform " },
+    member,
+  );
+  assert.equal(updated.status, 200);
+  assert.equal(updated.value.user.jobTitle, "Staff engineer");
+  assert.equal(updated.value.user.companyTeam, "Platform");
+
+  const canonical = await f.call(
+    "/api/profile",
+    { jobTitle: "Engineering manager", companyTeam: "platform" },
+    colleague,
+  );
+  assert.equal(canonical.status, 200);
+  assert.equal(canonical.value.user.companyTeam, "Platform");
+
+  const directory = await f.call("/api/people", undefined, member);
+  assert.equal(directory.status, 200);
+  assert.deepEqual(
+    directory.value.people.map((person) => person.actorId),
+    ["alex", "admin", "sam"],
+  );
+  assert.deepEqual(directory.value.teams, ["Platform"]);
+  assert.equal(directory.value.people[0].email, undefined);
+  assert.equal(directory.value.people[0].role, undefined);
+  assert.equal(directory.value.people[0].userId, undefined);
+  assert.equal(
+    directory.value.people.find((person) => person.actorId === "sam").jobTitle,
+    "Staff engineer",
+  );
+
+  assert.equal(
+    (
+      await f.call(
+        "/api/admin/users",
+        { userId: member.user.userId, jobTitle: "Changed by admin" },
+        admin,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await f.call(
+        "/api/admin/users",
+        { userId: colleague.user.userId, disabled: true },
+        admin,
+      )
+    ).status,
+    200,
+  );
+  const afterDisable = await f.call("/api/people", undefined, member);
+  assert.deepEqual(
+    afterDisable.value.people.map((person) => person.actorId),
+    ["admin", "sam"],
+  );
+});
 
 test("first admin requires a host-issued key, normalizes identity, and can be claimed only once", async (t) => {
   const f = await fixture(t);
@@ -749,6 +852,14 @@ test("dashboard serves private metadata, separates demo data, exposes scores, an
   assert.match(instructions, /team login engineering --scope work/);
   assert.match(instructions, /Never ask for my password/);
   assert(!/ps[bidrs]?_[a-f0-9]{64}/.test(instructions));
+  for (const route of [
+    "/people",
+    `/setups/admin/review/${profile.revision}`,
+  ]) {
+    const page = await fetch(f.url + route);
+    assert.equal(page.status, 200, route);
+    assert.match(await page.text(), /<title>Loadout/);
+  }
   const html = await fetch(f.url + "/comparisons");
   assert.equal(html.status, 200);
   assert.match(

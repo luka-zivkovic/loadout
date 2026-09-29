@@ -20,6 +20,10 @@ Open the private installation link saved to `~/.pi-share-registry/work/setup-lin
 
 The service listens on `127.0.0.1:4318`. For other machines, place it behind HTTPS, preserve the public Host header, and pass `--public-url https://share.example.com`. `--host` and `--port` change the listener. Each registry directory has one immutable team identity and scope; use another registry for personal use.
 
+## Find people
+
+Every signed-in member can open **People** and search active members by name, handle, optional job title, or optional company team. Members maintain only their own profile fields. Job title and company team are optional, and matching an existing company-team name keeps directory filters consistent. Account email, access role, status, and invitations remain in the admin-only **Team & access** view.
+
 ## Connect your device
 
 On your own machine:
@@ -69,6 +73,8 @@ node dist/cli.js team profiles engineering --scope work
 ```
 
 The registry owns the namespace. If both you and a colleague have a profile named `my-review`, they appear as `makina/my-review` and `colleague/my-review`. Their bundles and revisions remain distinct unless their content is identical.
+
+Selecting a revision in **Shared setups** opens a quick-inspect drawer. Use **Open full page** for the complete inspector and a stable URL containing the owner, setup name, and exact revision. Browser back returns to the previous library filters.
 
 Pull a colleague's setup:
 
