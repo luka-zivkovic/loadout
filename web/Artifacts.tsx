@@ -1,5 +1,11 @@
-import { Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Code2, Eye, Info, Search } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import type { ProfileListing, SkillListing } from "../src/team-protocol";
 import { api, Copy, date, ErrorBox, Modal, short } from "./shared";
 import { useParam, go, artifactUrl, setParam } from "./navigation";
@@ -112,6 +118,12 @@ type FileContent = {
   binary: boolean;
   truncated: boolean;
 };
+export type FileCategory = {
+  key: string;
+  label: string;
+  description: string;
+  paths: string[];
+};
 function fileGroup(path: string) {
   const [root, packageName] = path.split("/");
   if (!root || !path.includes("/")) return "Root";
@@ -119,24 +131,82 @@ function fileGroup(path: string) {
     return `${root}/${packageName}`;
   return root;
 }
-function fileLabel(path: string, group: string) {
-  if (group === "Root") return path;
-  const prefix = `${group}/`;
-  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+function pathContains(root: string, path: string) {
+  return path === root || path.startsWith(`${root}/`);
+}
+function relativeFileLabel(path: string, root: string) {
+  if (root === "Root") return path;
+  if (!pathContains(root, path))
+    return path.replace(/^(global|project)\//, "");
+  const name = root.split("/").at(-1) ?? root;
+  const suffix = path.slice(root.length + 1);
+  const genericRoots = new Set([
+    "skills",
+    "extensions",
+    "hooks",
+    "agents",
+    "prompts",
+  ]);
+  if (suffix && genericRoots.has(name)) return suffix;
+  return suffix ? `${name}/${suffix}` : name;
+}
+const ReactMarkdown = lazy(() => import("react-markdown"));
+function MarkdownPreview({ source }: { source: string }) {
+  return (
+    <div className="markdown-preview">
+      <Suspense fallback={<p className="muted">Formatting preview…</p>}>
+        <ReactMarkdown
+          skipHtml
+          components={{
+            a: ({ href, children, title }) => {
+              const safe =
+                href?.startsWith("#") ||
+                /^(https?:|mailto:)/i.test(href ?? "");
+              return (
+                <a
+                  href={safe ? href : undefined}
+                  title={title}
+                  {...(href && /^(https?:|mailto:)/i.test(href)
+                    ? { target: "_blank", rel: "noreferrer" }
+                    : {})}
+                >
+                  {children}
+                </a>
+              );
+            },
+            img: ({ alt, title }) => (
+              <span className="markdown-image-placeholder" title={title}>
+                [Image not loaded{alt ? `: ${alt}` : ""}]
+              </span>
+            ),
+          }}
+        >
+          {source}
+        </ReactMarkdown>
+      </Suspense>
+    </div>
+  );
 }
 export function FileBrowser({
   kind,
   listing,
   files,
   before,
+  categories,
+  pathExplanation,
 }: {
   kind: "profile" | "skill";
   listing: Ref;
   files: FileInfo[];
   before?: Ref | null;
+  categories?: FileCategory[];
+  pathExplanation?: ReactNode;
 }) {
   const [selected, setSelected] = useState(files[0]?.path ?? "");
   const [query, setQuery] = useState("");
+  const [markdownView, setMarkdownView] = useState<"preview" | "source">(
+    "preview",
+  );
   const [content, setContent] = useState<FileContent | null>(null);
   const [previous, setPrevious] = useState<FileContent | null>(null);
   const [beforeFiles, setBeforeFiles] = useState<FileInfo[] | null>(null);
@@ -169,17 +239,58 @@ export function FileBrowser({
   const visibleFiles = allFiles.filter((file) =>
     file.path.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
-  const groupedFiles = [
-    ...visibleFiles
-      .reduce((groups, file) => {
-        const group = fileGroup(file.path);
-        const entries = groups.get(group) ?? [];
-        entries.push(file);
-        groups.set(group, entries);
-        return groups;
-      }, new Map<string, FileInfo[]>())
-      .entries(),
-  ];
+  const groupedFiles = (() => {
+    const groups = new Map<
+      string,
+      {
+        label: string;
+        description: string;
+        entries: { file: FileInfo; label: string }[];
+      }
+    >();
+    for (const category of categories ?? [])
+      groups.set(category.key, {
+        label: category.label,
+        description: category.description,
+        entries: [],
+      });
+    for (const file of visibleFiles) {
+      const category = categories?.find((candidate) =>
+        candidate.paths.some((path) => pathContains(path, file.path)),
+      );
+      const fallback = categories
+        ? {
+            key: "supporting",
+            label: "Supporting files",
+            description:
+              "Files retained for the resources above or for native configuration.",
+            root: file.path.replace(/^(global|project)\//, "").split("/")[0]!,
+          }
+        : {
+            key: fileGroup(file.path),
+            label: fileGroup(file.path),
+            description: "",
+            root: fileGroup(file.path),
+          };
+      const key = category?.key ?? fallback.key;
+      const group = groups.get(key) ?? {
+        label: category?.label ?? fallback.label,
+        description: category?.description ?? fallback.description,
+        entries: [],
+      };
+      const root = category
+        ? [...category.paths]
+            .filter((path) => pathContains(path, file.path))
+            .sort((a, b) => b.length - a.length)[0]!
+        : fallback.root;
+      group.entries.push({
+        file,
+        label: relativeFileLabel(file.path, root),
+      });
+      groups.set(key, group);
+    }
+    return [...groups.entries()].filter(([, group]) => group.entries.length);
+  })();
   const removed = !files.some((f) => f.path === selected);
   const added = Boolean(
     beforeFiles && !beforeFiles.some((f) => f.path === selected),
@@ -187,6 +298,9 @@ export function FileBrowser({
   useEffect(() => {
     setSelected(files[0]?.path ?? "");
   }, [listing.revision]);
+  useEffect(() => {
+    setMarkdownView("preview");
+  }, [selected, listing.revision]);
   useEffect(() => {
     let live = true;
     setError("");
@@ -231,8 +345,10 @@ export function FileBrowser({
             Included contents <span className="badge">{allFiles.length}</span>
           </h3>
           <p className="text-small muted">
-            Grouped by configuration area. Scripts and hooks are displayed
-            without executing them.
+            {categories
+              ? "Grouped by what each file does when this setup is active."
+              : "Grouped by bundle folder."}{" "}
+            Scripts and hooks are previewed without executing them.
           </p>
         </div>
         <label className="file-filter">
@@ -247,24 +363,36 @@ export function FileBrowser({
           />
         </label>
       </div>
+      {pathExplanation && (
+        <aside className="bundle-path-note">
+          <Info size={18} aria-hidden="true" />
+          <div>
+            <strong>Bundle paths, not paths on your computer</strong>
+            <p>{pathExplanation}</p>
+          </div>
+        </aside>
+      )}
       <div className="file-browser">
         <div className="file-list" role="group" aria-label="Included files">
-          {groupedFiles.map(([group, entries]) => (
-            <div className="file-group" key={group}>
+          {groupedFiles.map(([key, group]) => (
+            <div className="file-group" key={key}>
               <div className="file-group-heading">
-                <code>{group}</code>
-                <span>{entries.length}</span>
+                <div>
+                  <strong>{group.label}</strong>
+                  {group.description && <small>{group.description}</small>}
+                </div>
+                <span>{group.entries.length}</span>
               </div>
-              {entries.map((file) => (
+              {group.entries.map(({ file, label }) => (
                 <button
                   type="button"
                   key={file.path}
                   className={selected === file.path ? "selected" : ""}
                   onClick={() => setSelected(file.path)}
                   aria-pressed={selected === file.path}
-                  title={file.path}
+                  title={`Bundle path: ${file.path}`}
                 >
-                  <code>{fileLabel(file.path, group)}</code>
+                  <code>{label}</code>
                   {file.executable && (
                     <span className="badge amber">Executable</span>
                   )}
@@ -288,13 +416,43 @@ export function FileBrowser({
           <ErrorBox error={error || beforeError} />
           {content ? (
             <>
-              <p className="text-small muted">
-                {previous ? `${previous.bytes.toLocaleString()} → ` : ""}
-                {content.bytes.toLocaleString()} bytes
-                {content.truncated || previous?.truncated
-                  ? " · First 200 KB shown; inspect the full file locally before use"
-                  : ""}
-              </p>
+              <div className="file-preview-heading">
+                <div>
+                  <span className="data-label">Bundle path</span>
+                  <code>{selected}</code>
+                  <small>
+                    {previous ? `${previous.bytes.toLocaleString()} → ` : ""}
+                    {content.bytes.toLocaleString()} bytes
+                    {content.truncated || previous?.truncated
+                      ? " · First 200 KB shown; inspect the full file locally before use"
+                      : ""}
+                  </small>
+                </div>
+                {!previous &&
+                  !content.binary &&
+                  /\.md(?:own)?$/i.test(selected) && (
+                    <div
+                      className="file-view-toggle"
+                      role="group"
+                      aria-label="Markdown view"
+                    >
+                      <button
+                        type="button"
+                        aria-pressed={markdownView === "preview"}
+                        onClick={() => setMarkdownView("preview")}
+                      >
+                        <Eye size={14} aria-hidden="true" /> Preview
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={markdownView === "source"}
+                        onClick={() => setMarkdownView("source")}
+                      >
+                        <Code2 size={14} aria-hidden="true" /> Source
+                      </button>
+                    </div>
+                  )}
+              </div>
               {content.binary || previous?.binary ? (
                 <p>
                   Binary content cannot be previewed as text. Inspect it locally
@@ -305,6 +463,9 @@ export function FileBrowser({
                   before={previous.text ?? ""}
                   after={content.text ?? ""}
                 />
+              ) : /\.md(?:own)?$/i.test(selected) &&
+                markdownView === "preview" ? (
+                <MarkdownPreview source={content.text ?? ""} />
               ) : (
                 <pre tabIndex={0}>{content.text}</pre>
               )}

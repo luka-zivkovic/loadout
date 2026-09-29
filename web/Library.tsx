@@ -35,6 +35,7 @@ import {
   ArtifactControls,
   FileBrowser,
   SetupDiff,
+  type FileCategory,
   useArtifactSelection,
   refKey,
 } from "./Artifacts";
@@ -51,6 +52,66 @@ type Preview<T extends { files: { data: string }[] }> = Omit<T, "files"> & {
   files: Omit<T["files"][number], "data">[];
 };
 type SetupPreview = Preview<Profile> | Preview<NativeSetup>;
+function setupFileCategories(profile: SetupPreview): FileCategory[] {
+  const resources = profile.resources;
+  const categories: FileCategory[] = [
+    {
+      key: "instructions",
+      label: "Instructions",
+      description: "Guidance intended for the agent context.",
+      paths: profile.instructions,
+    },
+  ];
+  if (profile.schemaVersion === 1)
+    categories.push(
+      {
+        key: "extensions",
+        label: "Extensions",
+        description: "Pi code loaded when this isolated setup starts.",
+        paths: profile.resources.extensions,
+      },
+      {
+        key: "prompts",
+        label: "Prompt templates",
+        description: "Reusable prompts exposed to the setup.",
+        paths: resources.prompts,
+      },
+    );
+  else
+    categories.push(
+      {
+        key: "hooks",
+        label: "Hooks",
+        description: "Lifecycle commands the native harness may execute.",
+        paths: profile.resources.hooks,
+      },
+      {
+        key: "agents",
+        label: "Agents",
+        description: "Custom agent definitions exposed to the harness.",
+        paths: profile.resources.agents,
+      },
+      {
+        key: "prompts",
+        label: "Prompt templates",
+        description: "Reusable prompts exposed to the setup.",
+        paths: resources.prompts,
+      },
+    );
+  categories.push({
+    key: "skills",
+    label: "Skills",
+    description: "Reusable procedures the harness can load or invoke.",
+    paths: [
+      ...resources.skills,
+      ...(profile.skillPins ?? []).map((pin) => pin.path),
+    ],
+  });
+  return categories.map((category) => ({
+    ...category,
+    paths: [...new Set(category.paths)],
+  }));
+}
 type LibraryProps = {
   data: Dashboard;
   refresh: () => Promise<unknown>;
@@ -295,46 +356,47 @@ export function Setups({ data, refresh, user }: LibraryProps) {
           </select>
         </div>
         {list.length ? (
-          <div className="setup-list" role="list">
+          <ul className="setup-list">
             {list.map((p) => (
-              <article className="setup-entry" role="listitem" key={refKey(p)}>
-                <div className="harness-stamp">
-                  <HarnessIcon harness={p.harness?.kind ?? "pi"} size={30} />
-                </div>
-                <div className="setup-main">
-                  <span className="data-label">
-                    {harnessLabels[p.harness?.kind ?? "pi"]} / {p.workflowId}
-                  </span>
-                  <button className="setup-title" onClick={() => setChosen(p)}>
-                    {p.name}
-                  </button>
-                  {p.description && (
-                    <p className="setup-purpose">{p.description}</p>
-                  )}
-                  <div className="setup-meta">
-                    <span>{p.model}</span>
-                    <code title={p.revision}>rev {short(p.revision)}</code>
-                  </div>
-                </div>
-                <div className="setup-owner">
-                  <span className="data-label">Publisher</span>
-                  <strong>{p.owner}</strong>
-                  <small>{date(p.publishedAt)}</small>
-                </div>
-                <div className="setup-resource-count">
-                  <strong>{String(p.skills).padStart(2, "0")}</strong>
-                  <span>{p.skills === 1 ? "skill" : "skills"}</span>
-                </div>
+              <li key={refKey(p)}>
                 <button
-                  className="setup-open"
-                  aria-label={`Inspect ${p.name}`}
+                  type="button"
+                  className="setup-entry"
                   onClick={() => setChosen(p)}
+                  aria-label={`Inspect ${p.name}, ${harnessLabels[p.harness?.kind ?? "pi"]}, by ${p.owner}`}
                 >
-                  <ArrowRight size={20} />
+                  <span className="harness-stamp">
+                    <HarnessIcon harness={p.harness?.kind ?? "pi"} size={30} />
+                  </span>
+                  <span className="setup-main">
+                    <span className="data-label">
+                      {harnessLabels[p.harness?.kind ?? "pi"]} / {p.workflowId}
+                    </span>
+                    <span className="setup-title">{p.name}</span>
+                    {p.description && (
+                      <span className="setup-purpose">{p.description}</span>
+                    )}
+                    <span className="setup-meta">
+                      <span>{p.model}</span>
+                      <code title={p.revision}>rev {short(p.revision)}</code>
+                    </span>
+                  </span>
+                  <span className="setup-owner">
+                    <span className="data-label">Publisher</span>
+                    <strong>{p.owner}</strong>
+                    <small>{date(p.publishedAt)}</small>
+                  </span>
+                  <span className="setup-resource-count">
+                    <strong>{String(p.skills).padStart(2, "0")}</strong>
+                    <span>{p.skills === 1 ? "skill" : "skills"}</span>
+                  </span>
+                  <span className="setup-open" aria-hidden="true">
+                    <ArrowRight size={20} />
+                  </span>
                 </button>
-              </article>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : (
           <Empty title="No matching setups">
             Share a setup or adjust the filters.
@@ -413,7 +475,23 @@ function SetupDetail({
   }, [refKey(listing), attempt]);
   const harness = listing.harness?.kind ?? "pi";
   const alias = `setup-${short(listing.revision)}`;
-  const commands = `loadout team pull ${data.team.teamName} ${listing.owner}/${listing.name} --scope ${data.team.scope} --revision ${listing.revision} --as ${alias}\nloadout setup inspect ${alias} --scope ${data.team.scope}\n${harness === "pi" ? `loadout run ${alias} --scope ${data.team.scope} --packet /path/to/frozen-review` : `loadout setup materialize ${alias} --scope ${data.team.scope} --out /path/to/new-config-directory`}`;
+  const pullCommand = `loadout team pull ${data.team.teamName} ${listing.owner}/${listing.name} --scope ${data.team.scope} --revision ${listing.revision} --as ${alias}`;
+  const inspectCommand = `loadout setup inspect ${alias} --scope ${data.team.scope}`;
+  const activationCommand =
+    harness === "pi"
+      ? `PACKET="/path/to/frozen-review"\nloadout run ${alias} --scope ${data.team.scope} --packet "$PACKET"`
+      : `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n${harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}="$SETUP_DIR" ${harness === "codex" ? "codex" : "claude"}${profile?.schemaVersion === 2 && profile.mcpServers ? ` --mcp-config "$SETUP_DIR/mcp.json"` : ""}`;
+  const commands = `${pullCommand}\n${inspectCommand}\n${activationCommand}`;
+  const requirements = profile
+    ? [
+        ...profile.requirements,
+        ...(profile.skillPins ?? []).flatMap((pin) =>
+          pin.requirements.map(
+            (requirement) => `${pin.name}: ${requirement}`,
+          ),
+        ),
+      ]
+    : [];
   const detail = (
     <div
       className={`setup-detail-content ${
@@ -481,115 +559,215 @@ function SetupDetail({
         }
       />
       {profile && (
-          <>
-            <p className="setup-description spaced">
-              {profile.workflow.prompt}
-            </p>
-            <div className="detail-grid spaced">
-              <div>
-                <dt>Model</dt>
-                <dd>{listing.model}</dd>
-              </div>
-              <div>
-                <dt>Workflow</dt>
-                <dd>{profile.workflow.id}</dd>
-              </div>
-              <div>
-                <dt>Scope</dt>
-                <dd>{profile.scope}</dd>
-              </div>
-              <div>
-                <dt>Resources</dt>
-                <dd>{profile.files.length} files</dd>
-              </div>
+        <>
+          <section className="setup-workflow-card spaced">
+            <span className="data-label">Workflow prompt</span>
+            <h3>{profile.workflow.id}</h3>
+            <p>{profile.workflow.prompt}</p>
+          </section>
+          <div className="detail-grid spaced">
+            <div>
+              <dt>Model</dt>
+              <dd>{listing.model}</dd>
             </div>
-            <button
-              className="button primary spaced"
-              onClick={() =>
-                go(
-                  `/comparisons?new=1&candidate=${encodeURIComponent(refKey(listing))}`,
-                )
-              }
-            >
-              Compare with mine <ArrowRight size={16} />
-            </button>
-            <h3 className="section-title">Requirements before use</h3>
-            <p className="muted">
-              Use {harnessLabels[harness]} with your own local authentication.
-              Check executable resources, paths, and project policy. Captured
-              version is not a portability guarantee.
-            </p>
+            <div>
+              <dt>Harness</dt>
+              <dd>{harnessLabels[harness]}</dd>
+            </div>
+            <div>
+              <dt>Scope</dt>
+              <dd>{profile.scope}</dd>
+            </div>
+            <div>
+              <dt>Included</dt>
+              <dd>
+                {Object.values(profile.resources).reduce(
+                  (total, paths) => total + paths.length,
+                  0,
+                )}{" "}
+                resources · {profile.files.length} files
+              </dd>
+            </div>
+          </div>
+          <section className="setup-use-guide" aria-labelledby="setup-use-title">
+            <header>
+              <div>
+                <span className="data-label">Local, explicit activation</span>
+                <h3 id="setup-use-title">Add and use this revision</h3>
+              </div>
+              <span className="badge green">Default config stays untouched</span>
+            </header>
+            <div className="setup-behavior">
+              <strong>What happens</strong>
+              <p>
+                Pulling saves this exact revision under a local Loadout alias;
+                it does not activate or install anything. Inspecting is also
+                read-only. {harness === "pi" ? (
+                  <>
+                    Running creates a temporary, isolated Pi configuration,
+                    loads the resources shown below, and applies the workflow to
+                    the frozen packet you choose.
+                  </>
+                ) : (
+                  <>
+                    Materializing writes a new configuration directory and
+                    refuses to overwrite an existing one. The setup affects only
+                    the {harnessLabels[harness]} process launched with that
+                    directory.
+                  </>
+                )}{" "}
+                Authentication and machine-local secrets are not included.
+              </p>
+              {profile.schemaVersion === 2 &&
+                (profile.resources.hooks.length > 0 ||
+                  Boolean(profile.settings.hooks)) && (
+                  <p className="setup-hook-warning">
+                    This revision includes hooks. They are inert in this preview
+                    but may execute when the native harness runs, so review them
+                    before activation.
+                  </p>
+                )}
+            </div>
+            <ol className="setup-use-steps">
+              <li>
+                <span>1</span>
+                <div>
+                  <strong>Add the pinned revision</strong>
+                  <p>Download it to your local Loadout store under a new alias.</p>
+                  <pre>{pullCommand}</pre>
+                </div>
+              </li>
+              <li>
+                <span>2</span>
+                <div>
+                  <strong>Inspect before activation</strong>
+                  <p>Review settings, requirements, and resolved bundle paths.</p>
+                  <pre>{inspectCommand}</pre>
+                </div>
+              </li>
+              <li>
+                <span>3</span>
+                <div>
+                  <strong>
+                    {harness === "pi"
+                      ? "Run with your frozen packet"
+                      : `Create and launch an isolated ${harnessLabels[harness]} config`}
+                  </strong>
+                  <p>
+                    {harness === "pi"
+                      ? "Set PACKET to the local frozen review packet this workflow should inspect."
+                      : `SETUP_DIR is a suggested destination under your home directory. Change it if you prefer; it must not already exist. The final command selects this setup for one ${harnessLabels[harness]} process.`}
+                  </p>
+                  <pre>{activationCommand}</pre>
+                </div>
+              </li>
+            </ol>
+            <div className="setup-use-actions">
+              <Copy text={commands} label="Copy all setup commands" />
+              <small>
+                If your configured remote alias differs from {data.team.teamName},
+                replace it in the pull command.
+              </small>
+            </div>
+          </section>
+          <button
+            className="button primary spaced"
+            onClick={() =>
+              go(
+                `/comparisons?new=1&candidate=${encodeURIComponent(refKey(listing))}`,
+              )
+            }
+          >
+            Compare with mine <ArrowRight size={16} />
+          </button>
+          <h3 className="section-title">Requirements before use</h3>
+          <p className="muted">
+            Use {harnessLabels[harness]} with your own local authentication.
+            Check executable resources and project policy. Captured version is
+            not a portability guarantee.
+          </p>
+          {requirements.length ? (
             <ul>
-              {[
-                ...profile.requirements,
-                ...(profile.skillPins ?? []).flatMap((p) =>
-                  p.requirements.map((r) => `${p.name}: ${r}`),
-                ),
-              ].map((r, i) => (
-                <li key={i}>{r}</li>
+              {requirements.map((requirement, index) => (
+                <li key={index}>{requirement}</li>
               ))}
             </ul>
-            <h3 className="section-title">Pinned skills</h3>
-            {profile.skillPins?.length ? (
-              profile.skillPins.map((p) => (
-                <p key={p.name}>
-                  {p.name} <code>{short(p.revision)}</code> · {p.description}
-                </p>
-              ))
-            ) : (
-              <p className="muted">No standalone skill revisions pinned.</p>
-            )}
-            {previous ? (
-              <SetupDiff baseline={previous} candidate={listing} />
-            ) : (
-              <FileBrowser
-                kind="profile"
-                listing={listing}
-                files={profile.files}
-              />
-            )}
-            <details className="spaced">
-              <summary>Native settings and workflow</summary>
-              <pre>
-                {JSON.stringify(
-                  {
-                    settings: profile.settings,
-                    workflow: profile.workflow,
-                    resources: profile.resources,
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
-            </details>
-            <details className="spaced">
-              <summary>
-                Omitted settings ({profile.omittedSettings.length})
-              </summary>
-              <p>{profile.omittedSettings.join(", ") || "None"}</p>
-            </details>
-            <details className="spaced">
-              <summary>Try this revision without a comparison</summary>
-              <p className="muted">
-                Use your configured remote alias if it differs from{" "}
-                {data.team.teamName}. Inspect first, then choose a new local
-                destination.
+          ) : (
+            <p className="muted">No additional requirements declared.</p>
+          )}
+          <h3 className="section-title">Pinned skills</h3>
+          {profile.skillPins?.length ? (
+            profile.skillPins.map((pin) => (
+              <p key={pin.name}>
+                {pin.name} <code>{short(pin.revision)}</code> · {pin.description}
               </p>
-              <pre>{commands}</pre>
-              <Copy text={commands} label="Copy setup commands" />
-              {harness !== "pi" && (
-                <p className="muted spaced">
-                  Materialization prints the native launch command. To record
-                  observations, start{" "}
-                  <code>
-                    loadout telemetry listen {alias} --scope {data.team.scope}
-                  </code>
-                  , use the selected configuration directory in the printed
-                  launch environment, then stop the collector and run team sync.
-                </p>
+            ))
+          ) : (
+            <p className="muted">No standalone skill revisions pinned.</p>
+          )}
+          {previous ? (
+            <SetupDiff baseline={previous} candidate={listing} />
+          ) : (
+            <FileBrowser
+              kind="profile"
+              listing={listing}
+              files={profile.files}
+              categories={setupFileCategories(profile)}
+              pathExplanation={
+                harness === "pi" ? (
+                  <>
+                    Labels such as <code>global/</code> record where the
+                    publisher captured a file. Loadout reconstructs them inside
+                    a temporary run directory and loads the declared resources
+                    from there; it does not write these paths into your normal Pi
+                    configuration.
+                  </>
+                ) : (
+                  <>
+                    Prefixes such as <code>global/</code>,{" "}
+                    <code>project/</code>, and <code>shared-skills/</code> record
+                    source layers inside this immutable revision. When you
+                    materialize it, Loadout maps them into the new SETUP_DIR you
+                    chose—for example, bundled skills become{" "}
+                    <code>skills/&lt;name&gt;</code>. Your default configuration is
+                    not modified.
+                  </>
+                )
+              }
+            />
+          )}
+          <details className="spaced">
+            <summary>Native settings and workflow</summary>
+            <pre>
+              {JSON.stringify(
+                {
+                  settings: profile.settings,
+                  workflow: profile.workflow,
+                  resources: profile.resources,
+                },
+                null,
+                2,
               )}
+            </pre>
+          </details>
+          <details className="spaced">
+            <summary>Omitted settings ({profile.omittedSettings.length})</summary>
+            <p>{profile.omittedSettings.join(", ") || "None"}</p>
+          </details>
+          {harness !== "pi" && (
+            <details className="spaced">
+              <summary>Record observations for this native setup</summary>
+              <p className="muted">
+                Start{" "}
+                <code>
+                  loadout telemetry listen {alias} --scope {data.team.scope}
+                </code>
+                , launch the isolated configuration, then stop the collector and
+                run team sync.
+              </p>
             </details>
-          </>
+          )}
+        </>
       )}
     </div>
   );
