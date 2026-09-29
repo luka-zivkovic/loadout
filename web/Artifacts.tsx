@@ -381,7 +381,6 @@ export function FileBrowser({
                   <strong>{group.label}</strong>
                   {group.description && <small>{group.description}</small>}
                 </div>
-                <span>{group.entries.length}</span>
               </div>
               {group.entries.map(({ file, label }) => (
                 <button

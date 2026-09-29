@@ -388,10 +388,6 @@
   font-size: 10px;
   line-height: 1.4;
 }
-.file-group-heading > span {
-  color: var(--text-faint);
-  font: 10px var(--font-mono);
-}
 .file-list button {
   display: flex;
   flex-wrap: wrap;
