@@ -280,6 +280,98 @@
   border-bottom: 1px solid var(--border);
   padding: 10px 0;
 }
+.skill-preview-body {
+  min-width: 0;
+}
+.skill-preview-summary {
+  display: grid;
+  gap: 12px;
+  max-width: 82ch;
+}
+.skill-preview-summary > p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+.skill-preview-meta {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.skill-preview-meta strong {
+  color: var(--text-muted);
+}
+.skill-install-panel {
+  margin: 24px 0 8px;
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+}
+.skill-install-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.skill-install-heading > div {
+  max-width: 68ch;
+}
+.skill-install-heading h3 {
+  margin-bottom: 6px;
+  font-size: 19px;
+}
+.skill-install-heading p {
+  color: var(--text-muted);
+}
+.skill-install-targets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+.skill-install-targets button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.skill-install-targets button:hover:not(:disabled) {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+.skill-install-targets button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+}
+.skill-install-targets button:disabled {
+  opacity: 0.45;
+}
+.skill-install-panel .skill-install-destination {
+  margin-top: 12px;
+  color: var(--text-muted);
+}
+.skill-requirements {
+  margin: 12px 0 0;
+}
+.skill-install-panel > pre {
+  max-height: 180px;
+  margin: 16px 0 0;
+  overflow: auto;
+}
+.skill-activity-details > summary {
+  font-weight: 600;
+}
+.skill-activity-details > h3 {
+  margin: 20px 0 6px;
+}
+.skill-activity-details .row-actions {
+  margin-top: 12px;
+}
 .unavailable-panel {
   padding: 16px 20px;
   margin-top: 20px;
@@ -883,6 +975,18 @@ pre:focus-visible {
     align-items: stretch;
     flex-direction: column;
     gap: 12px;
+  }
+  .skill-install-panel {
+    padding: 16px 14px;
+  }
+  .skill-install-heading {
+    flex-direction: column;
+  }
+  .skill-install-heading .button {
+    width: 100%;
+  }
+  .skill-install-targets {
+    grid-template-columns: 1fr;
   }
   .setup-use-steps > li {
     grid-template-columns: 26px minmax(0, 1fr);

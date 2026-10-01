@@ -938,39 +938,48 @@ export function Skills({ data, refresh, user }: LibraryProps) {
           <HarnessSelect value={harness} onChange={setHarness} />
         </div>
         {list.length ? (
-          <div className="skill-grid">
-            {list.map((s) => (
-              <article className="skill-card" key={refKey(s)}>
-                <div className="skill-card-heading">
-                  <Code2 size={22} />
-                  <code>{short(s.revision)}</code>
-                </div>
-                <h3>{s.name}</h3>
-                <span className="text-small muted">by {s.owner}</span>
-                <p className="skill-description">{s.description}</p>
-                <div className="tag-list">
-                  {s.compatibleWith.map((h) => (
-                    <span className="badge" key={h}>
-                      <HarnessLabel harness={h} />
-                    </span>
-                  ))}
-                </div>
-                <div className="skill-card-footer">
-                  <span className="text-small muted">
-                    {
-                      data.profiles.filter((p) =>
-                        p.skillPins?.some((pin) => pin.revision === s.revision),
-                      ).length
-                    }{" "}
-                    setups · {s.files} files
+          <ul className="skill-grid">
+            {list.map((skill) => (
+              <li key={refKey(skill)}>
+                <button
+                  type="button"
+                  className="skill-card"
+                  onClick={() => setChosen(skill)}
+                  aria-label={`Preview and install ${skill.name} by ${skill.owner}`}
+                >
+                  <span className="skill-card-heading">
+                    <Code2 size={22} aria-hidden="true" />
+                    <code>{short(skill.revision)}</code>
                   </span>
-                  <button className="text-button" onClick={() => setChosen(s)}>
-                    Use this skill <ArrowRight size={14} />
-                  </button>
-                </div>
-              </article>
+                  <span className="skill-card-title">{skill.name}</span>
+                  <span className="text-small muted">by {skill.owner}</span>
+                  <span className="skill-description">{skill.description}</span>
+                  <span className="tag-list">
+                    {skill.compatibleWith.map((compatibleHarness) => (
+                      <span className="badge" key={compatibleHarness}>
+                        <HarnessLabel harness={compatibleHarness} />
+                      </span>
+                    ))}
+                  </span>
+                  <span className="skill-card-footer">
+                    <span className="text-small muted">
+                      {
+                        data.profiles.filter((profile) =>
+                          profile.skillPins?.some(
+                            (pin) => pin.revision === skill.revision,
+                          ),
+                        ).length
+                      }{" "}
+                      setups · {skill.files} files
+                    </span>
+                    <span className="text-button">
+                      Preview and install <ArrowRight size={14} />
+                    </span>
+                  </span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : (
           <Empty title="No matching skills">
             Share a reusable skill or adjust the filters.
@@ -1043,18 +1052,32 @@ function SkillDetail({
   }, [endpoint, data.days, data.mode]);
   const alias = `skill-${short(listing.revision)}`;
   const command = `loadout team pull-skill ${data.team.teamName} ${listing.owner}/${listing.name} --scope ${data.team.scope} --revision ${listing.revision} --as ${alias}\nloadout skill inspect ${alias} --scope ${data.team.scope}\nloadout skill install ${alias} --scope ${data.team.scope} --harness ${harness} --project .`;
+  const installPath =
+    harness === "pi"
+      ? `.pi/skills/${listing.name}`
+      : harness === "claude-code"
+        ? `.claude/skills/${listing.name}`
+        : `.agents/skills/${listing.name}`;
+  const installTargets = Object.keys(harnessLabels) as Harness[];
   return (
-    <Modal
-      title={`${listing.owner} / ${listing.name}`}
-      close={close}
-      variant="drawer"
-    >
-      <div className="modal-body">
-        <div className="tag-list">
-          <span className="badge green">Pinned skill</span>
-          <code>{short(listing.revision)}</code>
+    <Modal title={listing.name} close={close} wide>
+      <div className="modal-body skill-preview-body">
+        <div className="skill-preview-summary">
+          <div className="tag-list">
+            <span className="badge green">Pinned revision</span>
+            {listing.compatibleWith.map((compatibleHarness) => (
+              <span className="badge" key={compatibleHarness}>
+                <HarnessLabel harness={compatibleHarness} />
+              </span>
+            ))}
+          </div>
+          <p>{listing.description}</p>
+          <span className="skill-preview-meta">
+            Published by <strong>{listing.owner}</strong> · {listing.files}{" "}
+            {listing.files === 1 ? "file" : "files"} · revision{" "}
+            <code>{short(listing.revision)}</code>
+          </span>
         </div>
-        <p className="spaced">{listing.description}</p>
         <ErrorBox error={error} />
         <ArtifactControls
           kind="skill"
@@ -1067,16 +1090,60 @@ function SkillDetail({
         />
         {detail && (
           <>
-            <h3 className="section-title">Compatibility and requirements</h3>
-            <p className="muted">
-              Compatibility is publisher-declared. Resolve native tool
-              dependencies locally.
-            </p>
-            <ul>
-              {listing.requirements.map((r, i) => (
-                <li key={i}>{r}</li>
-              ))}
-            </ul>
+            <section className="skill-install-panel" aria-labelledby="install-skill-title">
+              <div className="skill-install-heading">
+                <div>
+                  <h3 id="install-skill-title">Install this skill</h3>
+                  <p>
+                    Choose a harness, then copy the commands into the target
+                    project. The complete package is installed together and an
+                    existing skill folder is never overwritten.
+                  </p>
+                </div>
+                <Copy
+                  text={command}
+                  label={`Copy ${harnessLabels[harness]} install commands`}
+                  primary
+                />
+              </div>
+              <div
+                className="skill-install-targets"
+                role="group"
+                aria-label="Install skill for harness"
+              >
+                {installTargets.map((target) => {
+                  const compatible = listing.compatibleWith.includes(target);
+                  return (
+                    <button
+                      type="button"
+                      key={target}
+                      disabled={!compatible}
+                      aria-pressed={harness === target}
+                      title={
+                        compatible
+                          ? `Install for ${harnessLabels[target]}`
+                          : `Publisher has not declared ${harnessLabels[target]} compatibility`
+                      }
+                      onClick={() => setHarness(target)}
+                    >
+                      <HarnessIcon harness={target} size={20} />
+                      <span>{harnessLabels[target]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="skill-install-destination">
+                Installs into <code>{installPath}</code> in the current project.
+              </p>
+              {listing.requirements.length > 0 && (
+                <ul className="skill-requirements">
+                  {listing.requirements.map((requirement, index) => (
+                    <li key={index}>{requirement}</li>
+                  ))}
+                </ul>
+              )}
+              <pre>{command}</pre>
+            </section>
             <FileBrowser
               kind="skill"
               listing={listing}
@@ -1107,22 +1174,6 @@ function SkillDetail({
                 </>
               }
             />
-            <h3 className="section-title">Use this skill</h3>
-            <Field label="Install for">
-              <HarnessSelect
-                label="Install skill for harness"
-                value={harness}
-                onChange={(h) => setHarness(h as Harness)}
-                allowed={listing.compatibleWith}
-                all={false}
-              />
-            </Field>
-            <p className="text-small muted">
-              Run in the target project with your configured remote alias.
-              Existing skill folders are never overwritten.
-            </p>
-            <pre>{command}</pre>
-            <Copy text={command} label="Copy install commands" />
             <details className="spaced">
               <summary>Pin this skill to a saved setup</summary>
               <pre>{`loadout setup add-skill YOUR_SETUP ${alias} --scope ${data.team.scope}`}</pre>
@@ -1131,82 +1182,82 @@ function SkillDetail({
                 the change.
               </p>
             </details>
-            <h3 className="section-title">
-              Activity referencing this revision
-            </h3>
-            <p className="text-small muted">
-              All harnesses · {data.mode} activity · last {data.days} days.
-              Library compatibility filters do not restrict this history.
-            </p>
-            {activity?.summary.harnesses.length ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Harness</th>
-                      <th>Observations</th>
-                      <th>Known estimated spend</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activity.summary.harnesses.map((h) => (
-                      <tr key={h.harness}>
-                        <td>
-                          <HarnessLabel harness={h.harness as Harness} />
-                        </td>
-                        <td>{h.runs}</td>
-                        <td>
-                          {money(h.spend)}
-                          {h.runs > h.pricedRuns && (
-                            <span className="table-sub">
-                              {h.runs - h.pricedRuns} without pricing
-                            </span>
-                          )}
-                        </td>
+            <details className="spaced skill-activity-details">
+              <summary>Activity and team feedback</summary>
+              <h3>Activity referencing this revision</h3>
+              <p className="text-small muted">
+                All harnesses · {data.mode} activity · last {data.days} days.
+                References do not prove the skill was used or verified.
+              </p>
+              {activity?.summary.harnesses.length ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Harness</th>
+                        <th>Observations</th>
+                        <th>Known estimated spend</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {activity.summary.harnesses.map((entry) => (
+                        <tr key={entry.harness}>
+                          <td>
+                            <HarnessLabel harness={entry.harness as Harness} />
+                          </td>
+                          <td>{entry.runs}</td>
+                          <td>
+                            {money(entry.spend)}
+                            {entry.runs > entry.pricedRuns && (
+                              <span className="table-sub">
+                                {entry.runs - entry.pricedRuns} without pricing
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">No observations in this period.</p>
+              )}
+              <h3>Team feedback</h3>
+              <p className="muted">
+                Share a usefulness signal after trying it; task content stays
+                local.
+              </p>
+              <div className="row-actions">
+                {["useful", "needs-local-setup"].map((value) => (
+                  <button
+                    className="button secondary"
+                    key={value}
+                    onClick={async () => {
+                      try {
+                        const response = await api("/skills/feedback", {
+                          owner: listing.owner,
+                          name: listing.name,
+                          revision: listing.revision,
+                          value,
+                        });
+                        setActivity((old) =>
+                          old
+                            ? { ...old, feedback: response.feedback }
+                            : old,
+                        );
+                      } catch (caught) {
+                        setError((caught as Error).message);
+                      }
+                    }}
+                  >
+                    {value === "useful" ? "Useful" : "Needs local setup"} ·{" "}
+                    {activity?.feedback.find(
+                      (entry) => entry.value === value,
+                    )?.count ?? 0}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <p className="muted">No observations in this period.</p>
-            )}
-            <p className="text-small muted spaced">
-              References do not prove a skill was used or that its installed
-              version was verified. Usage does not establish quality.
-            </p>
-            <h3 className="section-title">Team feedback</h3>
-            <p className="muted">
-              Share a simple usefulness signal after trying it; task content
-              stays local.
-            </p>
-            <div className="row-actions">
-              {["useful", "needs-local-setup"].map((value) => (
-                <button
-                  className="button secondary"
-                  key={value}
-                  onClick={async () => {
-                    try {
-                      const r = await api("/skills/feedback", {
-                        owner: listing.owner,
-                        name: listing.name,
-                        revision: listing.revision,
-                        value,
-                      });
-                      setActivity((old) =>
-                        old ? { ...old, feedback: r.feedback } : old,
-                      );
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
-                >
-                  {value === "useful" ? "Useful" : "Needs local setup"} ·{" "}
-                  {activity?.feedback.find((f) => f.value === value)?.count ??
-                    0}
-                </button>
-              ))}
-            </div>
+            </details>
           </>
         )}
       </div>

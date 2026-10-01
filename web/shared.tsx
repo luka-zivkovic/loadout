@@ -179,12 +179,14 @@ export function Modal({
   close,
   variant = "dialog",
   compact = false,
+  wide = false,
 }: {
   title: string;
   children: ReactNode;
   close: () => void;
   variant?: "dialog" | "drawer" | "navigation";
   compact?: boolean;
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -211,7 +213,9 @@ export function Modal({
         if (e.target === e.currentTarget) close();
       }}
     >
-      <section className={`modal${compact ? " modal-compact" : ""}`}>
+      <section
+        className={`modal${compact ? " modal-compact" : ""}${wide ? " modal-wide" : ""}`}
+      >
         <div className="panel-heading">
           <h2 id={titleId}>{title}</h2>
           <button
@@ -231,9 +235,11 @@ export function Modal({
 export function Copy({
   text,
   label = "Copy",
+  primary = false,
 }: {
   text: string;
   label?: string;
+  primary?: boolean;
 }) {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -241,7 +247,7 @@ export function Copy({
     <>
       <button
         type="button"
-        className="button secondary"
+        className={`button ${primary ? "primary" : "secondary"}`}
         onClick={() => {
           navigator.clipboard
             .writeText(text)
