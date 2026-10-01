@@ -183,7 +183,7 @@ td code { font-size: 11px; padding: 2px 5px; border: 1px solid var(--border); bo
 .modal { display: flex; flex-direction: column; width: min(880px,100%); max-height: calc(100dvh - 48px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-modal); animation: modal-in var(--t-enter); }
 .modal > .panel-heading { flex-shrink: 0; align-items: center; }
 .modal-compact { width: min(480px,100%); }
-.modal-wide { width: min(1180px,100%); }
+.modal-wide { width: min(1480px,100%); }
 .modal > .panel-heading h2 { overflow-wrap: anywhere; }
 .modal-body { padding: 20px; overflow-y: auto; overscroll-behavior: contain; }
 .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
