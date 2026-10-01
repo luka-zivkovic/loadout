@@ -123,6 +123,23 @@ export type FileCategory = {
   label: string;
   description: string;
   paths: string[];
+  collections?: {
+    key: string;
+    label: string;
+    root: string;
+  }[];
+};
+type FileBrowserEntry = {
+  key: string;
+  label: string;
+  root: string;
+  collection: boolean;
+  files: FileInfo[];
+};
+type FileBrowserGroup = {
+  label: string;
+  description: string;
+  entries: FileBrowserEntry[];
 };
 function fileGroup(path: string) {
   const [root, packageName] = path.split("/");
@@ -135,7 +152,7 @@ function pathContains(root: string, path: string) {
   return path === root || path.startsWith(`${root}/`);
 }
 function relativeFileLabel(path: string, root: string) {
-  if (root === "Root") return path;
+  if (!root || root === "Root") return path;
   if (!pathContains(root, path))
     return path.replace(/^(global|project)\//, "");
   const name = root.split("/").at(-1) ?? root;
@@ -236,28 +253,33 @@ export function FileBrowser({
       (f) => !files.some((current) => current.path === f.path),
     ),
   ];
-  const visibleFiles = allFiles.filter((file) =>
-    file.path.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
-  );
-  const groupedFiles = (() => {
+  const fileGroups = (() => {
     const groups = new Map<
       string,
       {
         label: string;
         description: string;
-        entries: { file: FileInfo; label: string }[];
+        entries: Map<string, FileBrowserEntry>;
       }
     >();
     for (const category of categories ?? [])
       groups.set(category.key, {
         label: category.label,
         description: category.description,
-        entries: [],
+        entries: new Map(),
       });
-    for (const file of visibleFiles) {
-      const category = categories?.find((candidate) =>
-        candidate.paths.some((path) => pathContains(path, file.path)),
+    for (const file of allFiles) {
+      const category = categories?.find(
+        (candidate) =>
+          candidate.paths.some((path) => pathContains(path, file.path)) ||
+          candidate.collections?.some((collection) => !collection.root),
       );
+      const collection = category?.collections
+        ?.filter(
+          (candidate) =>
+            !candidate.root || pathContains(candidate.root, file.path),
+        )
+        .sort((a, b) => b.root.length - a.root.length)[0];
       const fallback = categories
         ? {
             key: "supporting",
@@ -272,25 +294,70 @@ export function FileBrowser({
             description: "",
             root: fileGroup(file.path),
           };
-      const key = category?.key ?? fallback.key;
-      const group = groups.get(key) ?? {
+      const groupKey = category?.key ?? fallback.key;
+      const group = groups.get(groupKey) ?? {
         label: category?.label ?? fallback.label,
         description: category?.description ?? fallback.description,
-        entries: [],
+        entries: new Map<string, FileBrowserEntry>(),
       };
       const root = category
-        ? [...category.paths]
+        ? ([...category.paths]
             .filter((path) => pathContains(path, file.path))
-            .sort((a, b) => b.length - a.length)[0]!
+            .sort((a, b) => b.length - a.length)[0] ??
+          collection?.root ??
+          fallback.root)
         : fallback.root;
-      group.entries.push({
-        file,
-        label: relativeFileLabel(file.path, root),
-      });
-      groups.set(key, group);
+      const entryKey = collection
+        ? `collection:${collection.key}`
+        : `file:${file.path}`;
+      const entry = group.entries.get(entryKey) ?? {
+        key: entryKey,
+        label: collection?.label ?? relativeFileLabel(file.path, root),
+        root: collection?.root ?? root,
+        collection: Boolean(collection),
+        files: [],
+      };
+      entry.files.push(file);
+      group.entries.set(entryKey, entry);
+      groups.set(groupKey, group);
     }
-    return [...groups.entries()].filter(([, group]) => group.entries.length);
+    return [...groups.entries()]
+      .map(
+        ([key, group]) =>
+          [
+            key,
+            { ...group, entries: [...group.entries.values()] },
+          ] as [string, FileBrowserGroup],
+      )
+      .filter(([, group]) => group.entries.length);
   })();
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const groupedFiles = fileGroups
+    .map(
+      ([key, group]) =>
+        [
+          key,
+          {
+            ...group,
+            entries: group.entries.filter(
+              (entry) =>
+                !normalizedQuery ||
+                entry.label.toLocaleLowerCase().includes(normalizedQuery) ||
+                entry.files.some((file) =>
+                  file.path.toLocaleLowerCase().includes(normalizedQuery),
+                ),
+            ),
+          },
+        ] as [string, FileBrowserGroup],
+    )
+    .filter(([, group]) => group.entries.length);
+  const selectedEntry = fileGroups
+    .flatMap(([, group]) => group.entries)
+    .find((entry) => entry.files.some((file) => file.path === selected));
+  const visibleEntryCount = groupedFiles.reduce(
+    (count, [, group]) => count + group.entries.length,
+    0,
+  );
   const removed = !files.some((f) => f.path === selected);
   const added = Boolean(
     beforeFiles && !beforeFiles.some((f) => f.path === selected),
@@ -345,9 +412,11 @@ export function FileBrowser({
             Included contents <span className="badge">{allFiles.length}</span>
           </h3>
           <p className="text-small muted">
-            {categories
-              ? "Grouped by what each file does when this setup is active."
-              : "Grouped by bundle folder."}{" "}
+            {categories?.some((category) => category.collections?.length)
+              ? "Skills appear once; choose a bundled file from the preview menu."
+              : categories
+                ? "Grouped by what each file does when this setup is active."
+                : "Grouped by bundle folder."}{" "}
             Scripts and hooks are previewed without executing them.
           </p>
         </div>
@@ -382,33 +451,68 @@ export function FileBrowser({
                   {group.description && <small>{group.description}</small>}
                 </div>
               </div>
-              {group.entries.map(({ file, label }) => (
-                <button
-                  type="button"
-                  key={file.path}
-                  className={selected === file.path ? "selected" : ""}
-                  onClick={() => setSelected(file.path)}
-                  aria-pressed={selected === file.path}
-                  title={`Bundle path: ${file.path}`}
-                >
-                  <code>{label}</code>
-                  {file.executable && (
-                    <span className="badge amber">Executable</span>
-                  )}
-                  {beforeFiles &&
-                    !files.some((current) => current.path === file.path) && (
+              {group.entries.map((entry) => {
+                const preferredFile =
+                  entry.files.find(
+                    (file) =>
+                      file.path === "SKILL.md" ||
+                      file.path.endsWith("/SKILL.md"),
+                  ) ?? entry.files[0]!;
+                const rowSelected = entry.files.some(
+                  (file) => file.path === selected,
+                );
+                const removedEntry = entry.files.every(
+                  (file) => !files.some((current) => current.path === file.path),
+                );
+                const addedEntry = Boolean(
+                  beforeFiles &&
+                    entry.files.every(
+                      (file) =>
+                        !beforeFiles.some((old) => old.path === file.path),
+                    ),
+                );
+                return (
+                  <button
+                    type="button"
+                    key={entry.key}
+                    className={rowSelected ? "selected" : ""}
+                    onClick={() => setSelected(preferredFile.path)}
+                    aria-pressed={rowSelected}
+                    title={
+                      entry.collection
+                        ? `${entry.label} · ${entry.files.length} bundled ${entry.files.length === 1 ? "file" : "files"}`
+                        : `Bundle path: ${preferredFile.path}`
+                    }
+                  >
+                    <span className="file-entry-label">
+                      {entry.collection ? (
+                        <>
+                          <strong>{entry.label}</strong>
+                          <small>
+                            {entry.files.length}{" "}
+                            {entry.files.length === 1 ? "file" : "files"}
+                          </small>
+                        </>
+                      ) : (
+                        <code>{entry.label}</code>
+                      )}
+                    </span>
+                    {entry.files.some((file) => file.executable) && (
+                      <span className="badge amber">Executable</span>
+                    )}
+                    {beforeFiles && removedEntry && (
                       <span className="badge red">Removed</span>
                     )}
-                  {beforeFiles &&
-                    !beforeFiles.some((old) => old.path === file.path) && (
+                    {beforeFiles && addedEntry && (
                       <span className="badge green">Added</span>
                     )}
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           ))}
-          {!visibleFiles.length && (
-            <p className="file-list-empty">No files match this filter.</p>
+          {!visibleEntryCount && (
+            <p className="file-list-empty">No items match this filter.</p>
           )}
         </div>
         <div className="file-preview">
@@ -417,40 +521,67 @@ export function FileBrowser({
             <>
               <div className="file-preview-heading">
                 <div>
-                  <span className="data-label">Bundle path</span>
+                  <span className="data-label">
+                    {selectedEntry?.collection ? "Skill package" : "Bundle path"}
+                  </span>
+                  {selectedEntry?.collection && (
+                    <strong className="file-preview-package">
+                      {selectedEntry.label}
+                    </strong>
+                  )}
                   <code>{selected}</code>
                   <small>
+                    {selectedEntry?.collection &&
+                      `${selectedEntry.files.length} bundled ${selectedEntry.files.length === 1 ? "file" : "files"} · `}
                     {previous ? `${previous.bytes.toLocaleString()} → ` : ""}
-                    {content.bytes.toLocaleString()} bytes
+                    {content.bytes.toLocaleString()} bytes in this file
                     {content.truncated || previous?.truncated
                       ? " · First 200 KB shown; inspect the full file locally before use"
                       : ""}
                   </small>
                 </div>
-                {!previous &&
-                  !content.binary &&
-                  /\.md(?:own)?$/i.test(selected) && (
-                    <div
-                      className="file-view-toggle"
-                      role="group"
-                      aria-label="Markdown view"
-                    >
-                      <button
-                        type="button"
-                        aria-pressed={markdownView === "preview"}
-                        onClick={() => setMarkdownView("preview")}
+                <div className="file-preview-controls">
+                  {selectedEntry?.collection &&
+                    selectedEntry.files.length > 1 && (
+                      <label className="file-picker">
+                        <span>Preview file</span>
+                        <select
+                          value={selected}
+                          onChange={(event) => setSelected(event.target.value)}
+                        >
+                          {selectedEntry.files.map((file) => (
+                            <option key={file.path} value={file.path}>
+                              {relativeFileLabel(file.path, selectedEntry.root)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  {!previous &&
+                    !content.binary &&
+                    /\.md(?:own)?$/i.test(selected) && (
+                      <div
+                        className="file-view-toggle"
+                        role="group"
+                        aria-label="Markdown view"
                       >
-                        <Eye size={14} aria-hidden="true" /> Preview
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={markdownView === "source"}
-                        onClick={() => setMarkdownView("source")}
-                      >
-                        <Code2 size={14} aria-hidden="true" /> Source
-                      </button>
-                    </div>
-                  )}
+                        <button
+                          type="button"
+                          aria-pressed={markdownView === "preview"}
+                          onClick={() => setMarkdownView("preview")}
+                        >
+                          <Eye size={14} aria-hidden="true" /> Preview
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={markdownView === "source"}
+                          onClick={() => setMarkdownView("source")}
+                        >
+                          <Code2 size={14} aria-hidden="true" /> Source
+                        </button>
+                      </div>
+                    )}
+                </div>
               </div>
               {content.binary || previous?.binary ? (
                 <p>

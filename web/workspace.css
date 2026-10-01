@@ -399,6 +399,21 @@
   padding: 10px 12px 10px 18px;
   background: transparent;
 }
+.file-entry-label {
+  display: grid;
+  flex: 1 1 160px;
+  gap: 3px;
+  min-width: 0;
+}
+.file-entry-label strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.file-entry-label small {
+  color: var(--text-faint);
+  font: 10px var(--font-mono);
+}
 .file-list button code {
   overflow-wrap: anywhere;
   font-size: 11px;
@@ -429,6 +444,11 @@
 .file-preview-heading > div:first-child {
   min-width: 0;
 }
+.file-preview-package {
+  display: block;
+  margin-top: 5px;
+  font-size: 15px;
+}
 .file-preview-heading code {
   display: block;
   margin-top: 4px;
@@ -440,6 +460,32 @@
   margin-top: 5px;
   color: var(--text-faint);
   font: 10px var(--font-mono);
+}
+.file-preview-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.file-picker {
+  display: grid;
+  gap: 4px;
+  min-width: min(260px, 100%);
+}
+.file-picker > span {
+  color: var(--text-faint);
+  font: 10px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.file-picker select {
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 28px 5px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font: 11px var(--font-mono);
 }
 .file-view-toggle {
   display: flex;
@@ -851,6 +897,12 @@ pre:focus-visible {
   .setup-behavior,
   .setup-use-guide > header {
     padding-inline: 14px;
+  }
+  .file-preview-controls {
+    justify-content: flex-start;
+  }
+  .file-picker {
+    width: 100%;
   }
   .file-view-toggle {
     align-self: flex-start;

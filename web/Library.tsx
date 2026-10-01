@@ -52,8 +52,28 @@ type Preview<T extends { files: { data: string }[] }> = Omit<T, "files"> & {
   files: Omit<T["files"][number], "data">[];
 };
 type SetupPreview = Preview<Profile> | Preview<NativeSetup>;
+function bundleContains(root: string, path: string) {
+  return path === root || path.startsWith(`${root}/`);
+}
 function setupFileCategories(profile: SetupPreview): FileCategory[] {
   const resources = profile.resources;
+  const skillCollections = profile.files
+    .filter(
+      (file) =>
+        (file.path === "SKILL.md" || file.path.endsWith("/SKILL.md")) &&
+        resources.skills.some((root) => bundleContains(root, file.path)),
+    )
+    .map((file) => {
+      const root =
+        file.path === "SKILL.md"
+          ? ""
+          : file.path.slice(0, -"/SKILL.md".length);
+      return {
+        key: root || profile.name,
+        label: root.split("/").at(-1) ?? profile.name,
+        root,
+      };
+    });
   const categories: FileCategory[] = [
     {
       key: "instructions",
@@ -101,11 +121,12 @@ function setupFileCategories(profile: SetupPreview): FileCategory[] {
   categories.push({
     key: "skills",
     label: "Skills",
-    description: "Reusable procedures the harness can load or invoke.",
+    description: "Each skill appears once; select it to browse bundled files.",
     paths: [
       ...resources.skills,
       ...(profile.skillPins ?? []).map((pin) => pin.path),
     ],
+    collections: skillCollections,
   });
   return categories.map((category) => ({
     ...category,
@@ -1061,6 +1082,30 @@ function SkillDetail({
               listing={listing}
               files={detail.skill.files}
               before={previous}
+              categories={[
+                {
+                  key: "skill-package",
+                  label: "Skill",
+                  description:
+                    "One installable package with its supporting files.",
+                  paths: detail.skill.files.map((file) => file.path),
+                  collections: [
+                    {
+                      key: listing.revision,
+                      label: listing.name,
+                      root: "",
+                    },
+                  ],
+                },
+              ]}
+              pathExplanation={
+                <>
+                  This is one installable skill. Its files stay together when
+                  pulled or installed; use the preview menu to inspect any file
+                  inside it. The paths shown there are relative to the skill,
+                  not absolute paths on your computer.
+                </>
+              }
             />
             <h3 className="section-title">Use this skill</h3>
             <Field label="Install for">
