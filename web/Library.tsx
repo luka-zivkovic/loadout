@@ -34,6 +34,7 @@ import { HarnessIcon, HarnessLabel } from "./HarnessIcon";
 import {
   ArtifactControls,
   FileBrowser,
+  SkillPackagePreview,
   SetupDiff,
   type FileCategory,
   useArtifactSelection,
@@ -1144,35 +1145,10 @@ function SkillDetail({
               )}
               <pre>{command}</pre>
             </section>
-            <FileBrowser
-              kind="skill"
+            <SkillPackagePreview
               listing={listing}
               files={detail.skill.files}
               before={previous}
-              categories={[
-                {
-                  key: "skill-package",
-                  label: "Skill",
-                  description:
-                    "One installable package with its supporting files.",
-                  paths: detail.skill.files.map((file) => file.path),
-                  collections: [
-                    {
-                      key: listing.revision,
-                      label: listing.name,
-                      root: "",
-                    },
-                  ],
-                },
-              ]}
-              pathExplanation={
-                <>
-                  This is one installable skill. Its files stay together when
-                  pulled or installed; use the preview menu to inspect any file
-                  inside it. The paths shown there are relative to the skill,
-                  not absolute paths on your computer.
-                </>
-              }
             />
             <details className="spaced">
               <summary>Pin this skill to a saved setup</summary>

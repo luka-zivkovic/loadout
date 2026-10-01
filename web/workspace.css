@@ -372,6 +372,153 @@
 .skill-activity-details .row-actions {
   margin-top: 12px;
 }
+.skill-package-preview {
+  margin-top: 24px;
+}
+.skill-package-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 0.72fr);
+  border: 1px solid var(--border-strong);
+  background: var(--background);
+}
+.skill-document-preview {
+  min-width: 0;
+  border-right: 1px solid var(--border);
+}
+.skill-document-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 74px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.skill-document-heading h3 {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  font: 600 13px var(--font-mono);
+}
+.skill-document-heading small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-faint);
+  font: 10px var(--font-mono);
+}
+.skill-document-content {
+  min-height: 520px;
+  padding: 16px;
+}
+.skill-document-content > pre,
+.skill-document-content > .line-diff {
+  max-height: 590px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre;
+}
+.skill-document-content .markdown-preview {
+  max-height: 590px;
+  margin-top: 0;
+}
+.skill-package-files {
+  min-width: 0;
+  background: var(--surface-2);
+}
+.skill-package-files > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.skill-package-files > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skill-package-files > header h3 {
+  font-size: 13px;
+}
+.skill-package-files > header > span {
+  color: var(--text-faint);
+  font: 10px var(--font-mono);
+}
+.skill-package-files > p {
+  padding: 10px 14px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.skill-package-filter {
+  position: relative;
+  display: block;
+  margin: 12px 12px 10px;
+}
+.skill-package-filter > svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  color: var(--text-faint);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.skill-package-filter input {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px 7px 31px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  font-size: 11px;
+}
+.skill-package-files nav {
+  max-height: 555px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.skill-file-section > strong {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text-faint);
+  font: 10px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.skill-file-section + .skill-file-section {
+  border-top: 1px solid var(--border-strong);
+}
+.skill-file-section button {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px 9px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+}
+.skill-file-section button:hover {
+  background: var(--surface-3);
+}
+.skill-file-section button.selected {
+  background: var(--surface-3);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.skill-file-section button code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .unavailable-panel {
   padding: 16px 20px;
   margin-top: 20px;
@@ -921,6 +1068,19 @@ pre:focus-visible {
   .overview-next {
     grid-template-columns: 1fr;
   }
+  .skill-package-layout {
+    grid-template-columns: 1fr;
+  }
+  .skill-document-preview {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .skill-document-content {
+    min-height: 420px;
+  }
+  .skill-package-files nav {
+    max-height: 320px;
+  }
   .setup-entry {
     grid-template-columns: 36px minmax(0, 1fr) 36px;
     gap: 12px;
@@ -971,7 +1131,8 @@ pre:focus-visible {
   }
   .artifact-files-heading,
   .setup-use-guide > header,
-  .file-preview-heading {
+  .file-preview-heading,
+  .skill-document-heading {
     align-items: stretch;
     flex-direction: column;
     gap: 12px;

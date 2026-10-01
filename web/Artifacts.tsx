@@ -1,4 +1,4 @@
-import { Code2, Eye, Info, Search } from "lucide-react";
+import { Code2, Eye, FileText, Info, Search } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -169,6 +169,10 @@ function relativeFileLabel(path: string, root: string) {
 }
 const ReactMarkdown = lazy(() => import("react-markdown"));
 function MarkdownPreview({ source }: { source: string }) {
+  const renderedSource = source.replace(
+    /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/,
+    "",
+  );
   return (
     <div className="markdown-preview">
       <Suspense fallback={<p className="muted">Formatting preview…</p>}>
@@ -198,7 +202,7 @@ function MarkdownPreview({ source }: { source: string }) {
             ),
           }}
         >
-          {source}
+          {renderedSource}
         </ReactMarkdown>
       </Suspense>
     </div>
@@ -606,6 +610,259 @@ export function FileBrowser({
             <p className="muted">No bundled files.</p>
           )}
         </div>
+      </div>
+    </section>
+  );
+}
+function skillFileSection(path: string) {
+  if (path === "SKILL.md")
+    return { key: "instructions", label: "Instructions" };
+  if (!path.includes("/")) return { key: "root", label: "Root files" };
+  const root = path.split("/")[0]!;
+  return {
+    key: root,
+    label: `${root.charAt(0).toUpperCase()}${root.slice(1).replaceAll("-", " ")}`,
+  };
+}
+export function SkillPackagePreview({
+  listing,
+  files,
+  before,
+}: {
+  listing: Ref;
+  files: FileInfo[];
+  before?: Ref | null;
+}) {
+  const entryPoint =
+    files.find((file) => file.path === "SKILL.md")?.path ??
+    files[0]?.path ??
+    "";
+  const [selected, setSelected] = useState(entryPoint);
+  const [query, setQuery] = useState("");
+  const [markdownView, setMarkdownView] = useState<"preview" | "source">(
+    "preview",
+  );
+  const [content, setContent] = useState<FileContent | null>(null);
+  const [previous, setPrevious] = useState<FileContent | null>(null);
+  const [beforeFiles, setBeforeFiles] = useState<FileInfo[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setSelected(entryPoint);
+  }, [listing.revision, entryPoint]);
+  useEffect(() => {
+    setMarkdownView("preview");
+  }, [selected, listing.revision]);
+  useEffect(() => {
+    let live = true;
+    setBeforeFiles(null);
+    if (before)
+      api(
+        `/skills/${encodeURIComponent(before.owner)}/${encodeURIComponent(before.name)}/${before.revision}`,
+      )
+        .then((response) => {
+          if (live) setBeforeFiles(response.skill.files);
+        })
+        .catch((caught) => {
+          if (live) setError(caught.message);
+        });
+    return () => {
+      live = false;
+    };
+  }, [before ? refKey(before) : ""]);
+  const allFiles = [
+    ...files,
+    ...(beforeFiles ?? []).filter(
+      (file) => !files.some((current) => current.path === file.path),
+    ),
+  ];
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleFiles = allFiles.filter(
+    (file) =>
+      !normalizedQuery ||
+      file.path.toLocaleLowerCase().includes(normalizedQuery),
+  );
+  const sections = [
+    ...visibleFiles
+      .reduce((groups, file) => {
+        const section = skillFileSection(file.path);
+        const group = groups.get(section.key) ?? {
+          label: section.label,
+          files: [] as FileInfo[],
+        };
+        group.files.push(file);
+        groups.set(section.key, group);
+        return groups;
+      }, new Map<string, { label: string; files: FileInfo[] }>())
+      .entries(),
+  ];
+  const removed = !files.some((file) => file.path === selected);
+  const added = Boolean(
+    beforeFiles && !beforeFiles.some((file) => file.path === selected),
+  );
+  useEffect(() => {
+    let live = true;
+    setError("");
+    setContent(null);
+    setPrevious(null);
+    if (!selected || (before && !beforeFiles)) return;
+    const empty: FileContent = {
+      path: selected,
+      bytes: 0,
+      text: "",
+      binary: false,
+      truncated: false,
+    };
+    const request = (reference: Ref) =>
+      api<FileContent>(
+        `${base("skill", reference)}/${reference.revision}/file?path=${encodeURIComponent(selected)}`,
+      );
+    (removed ? Promise.resolve(empty) : request(listing))
+      .then((response) => {
+        if (live) setContent(response);
+      })
+      .catch((caught) => {
+        if (live) setError(caught.message);
+      });
+    if (before)
+      (added ? Promise.resolve(empty) : request(before))
+        .then((response) => {
+          if (live) setPrevious(response);
+        })
+        .catch((caught) => {
+          if (live) setError(`Earlier file unavailable: ${caught.message}`);
+        });
+    return () => {
+      live = false;
+    };
+  }, [selected, refKey(listing), before ? refKey(before) : "", beforeFiles]);
+  const markdown = /\.md(?:own)?$/i.test(selected);
+  return (
+    <section className="skill-package-preview" aria-label="Skill package preview">
+      <div className="skill-package-layout">
+        <article className="skill-document-preview">
+          <header className="skill-document-heading">
+            <div>
+              <span className="data-label">
+                {selected === "SKILL.md" ? "Skill instructions" : "Supporting file"}
+              </span>
+              <h3>{selected || "No file selected"}</h3>
+              {content && (
+                <small>
+                  {previous ? `${previous.bytes.toLocaleString()} → ` : ""}
+                  {content.bytes.toLocaleString()} bytes
+                  {content.truncated || previous?.truncated
+                    ? " · First 200 KB shown"
+                    : ""}
+                </small>
+              )}
+            </div>
+            {!previous && content && !content.binary && markdown && (
+              <div
+                className="file-view-toggle"
+                role="group"
+                aria-label="Markdown view"
+              >
+                <button
+                  type="button"
+                  aria-pressed={markdownView === "preview"}
+                  onClick={() => setMarkdownView("preview")}
+                >
+                  <Eye size={14} aria-hidden="true" /> Preview
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={markdownView === "source"}
+                  onClick={() => setMarkdownView("source")}
+                >
+                  <Code2 size={14} aria-hidden="true" /> Source
+                </button>
+              </div>
+            )}
+          </header>
+          <div className="skill-document-content">
+            <ErrorBox error={error} />
+            {content ? (
+              content.binary || previous?.binary ? (
+                <p className="muted">
+                  Binary content cannot be previewed as text. Inspect it locally
+                  before use.
+                </p>
+              ) : previous && !previous.binary ? (
+                <LineDiff
+                  before={previous.text ?? ""}
+                  after={content.text ?? ""}
+                />
+              ) : markdown && markdownView === "preview" ? (
+                <MarkdownPreview source={content.text ?? ""} />
+              ) : (
+                <pre tabIndex={0}>{content.text}</pre>
+              )
+            ) : error ? null : selected ? (
+              <p className="muted">Loading file…</p>
+            ) : (
+              <p className="muted">This skill has no files.</p>
+            )}
+          </div>
+        </article>
+        <aside className="skill-package-files" aria-label="Files in this skill">
+          <header>
+            <div>
+              <FileText size={18} aria-hidden="true" />
+              <h3>Package files</h3>
+            </div>
+            <span>
+              {allFiles.length} {allFiles.length === 1 ? "file" : "files"}
+            </span>
+          </header>
+          <p>Every file below is installed with this skill.</p>
+          <label className="skill-package-filter">
+            <Search size={14} aria-hidden="true" />
+            <span className="sr-only">Filter skill files</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter package files"
+              autoComplete="off"
+            />
+          </label>
+          <nav aria-label="Skill package files">
+            {sections.map(([key, section]) => (
+              <div className="skill-file-section" key={key}>
+                <strong>{section.label}</strong>
+                {section.files.map((file) => (
+                  <button
+                    type="button"
+                    key={file.path}
+                    className={selected === file.path ? "selected" : ""}
+                    aria-pressed={selected === file.path}
+                    onClick={() => setSelected(file.path)}
+                  >
+                    <code>
+                      {key === "root" || key === "instructions"
+                        ? file.path
+                        : file.path.slice(key.length + 1)}
+                    </code>
+                    {file.executable && (
+                      <span className="badge amber">Executable</span>
+                    )}
+                    {beforeFiles &&
+                      !files.some((current) => current.path === file.path) && (
+                        <span className="badge red">Removed</span>
+                      )}
+                    {beforeFiles &&
+                      !beforeFiles.some((old) => old.path === file.path) && (
+                        <span className="badge green">Added</span>
+                      )}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {!visibleFiles.length && (
+              <p className="file-list-empty">No files match this filter.</p>
+            )}
+          </nav>
+        </aside>
       </div>
     </section>
   );
