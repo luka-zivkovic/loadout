@@ -33,7 +33,7 @@ import {
   type Dashboard,
 } from "./shared";
 import { HarnessLabel } from "./HarnessIcon";
-import type { Assessment, Metrics, Profile } from "../src/schema";
+import type { Assessment, Harness, Metrics, Profile } from "../src/schema";
 import type { ProfileListing } from "../src/team-protocol";
 import type { WebUser } from "../src/web-auth";
 import { SharingNotice } from "./Sharing";
@@ -167,11 +167,12 @@ export function ActivityView({
     };
   }, [runId]);
   const filter = (key: string, value: string) => {
-    const url = new URL(location.href);
-    url.searchParams.delete("offset");
-    if (value) url.searchParams.set(key, value);
-    else url.searchParams.delete(key);
-    go(url.pathname + url.search, true);
+    const params = new URLSearchParams(location.search);
+    params.delete("offset");
+    if (value) params.set(key, value);
+    else params.delete(key);
+    const search = params.toString();
+    go(`${location.pathname}${search ? `?${search}` : ""}`, true);
   };
   return (
     <>
@@ -810,6 +811,8 @@ type Device = {
 };
 export function Devices({ team }: { team: Dashboard["team"] }) {
   const [showInstructions, setShowInstructions] = useState(false);
+  const [measure, setMeasure] = useParam("measure");
+  const [measurementHarness, setMeasurementHarness] = useState<Harness>("pi");
   const [awaiting, setAwaiting] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [instructions, setInstructions] = useState("");
@@ -828,6 +831,15 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
   const [message, setMessage] = useState("");
   const [revoke, setRevoke] = useState<Device | null>(null);
   const reload = () => api("/devices").then((r) => setDevices(r.devices));
+  const activeDevices = devices.filter(
+    (device) =>
+      !device.revokedAt && Date.parse(device.expiresAt) > Date.now(),
+  );
+  const syncCommand = `loadout team sync REMOTE_NAME --scope ${team.scope}`;
+  const measurementInstructions =
+    measurementHarness === "pi"
+      ? `Measure one Pi workflow with Loadout.\n\n1. In Pi, before starting the work, run:\n/share-start WORKFLOW_NAME\n2. Complete the workflow.\n3. Finalize it in Pi with:\n/share-stop\n4. In a terminal, sync the saved metadata:\n${syncCommand}\n\nOnly activity between /share-start and /share-stop is measured. Existing sessions are not imported. Replace REMOTE_NAME with the local Loadout remote shown by team status.`
+      : `Measure one ${measurementHarness === "claude-code" ? "Claude Code" : "Codex"} workflow with Loadout.\n\n1. Start the local metadata collector before the work:\nloadout telemetry listen SETUP_ALIAS --scope ${team.scope}\n2. Run the harness command printed by the collector in another terminal.\n3. Exit the harness so it flushes, then stop the collector with Ctrl-C.\n4. Sync the finalized metadata:\n${syncCommand}\n\nExisting sessions are not imported. Replace SETUP_ALIAS and REMOTE_NAME with names from your local Loadout store. The collector records counters and metadata, not prompts, code, or tool contents.`;
   useEffect(() => {
     Promise.all([
       reload(),
@@ -901,14 +913,25 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
       {message && <div className="success spaced">{message}</div>}
       <div className="page-action-row">
         <p className="muted">
-          A device login grants access. It does not publish your configuration.
+          Device authorization, configuration sharing, and measurement are
+          separate actions.
         </p>
-        <button
-          className="button primary"
-          onClick={() => setShowInstructions(true)}
-        >
-          Connect a harness
-        </button>
+        <div className="row-actions">
+          {activeDevices.length > 0 && (
+            <button
+              className="button primary"
+              onClick={() => setMeasure("1")}
+            >
+              Start measuring
+            </button>
+          )}
+          <button
+            className={`button ${activeDevices.length ? "secondary" : "primary"}`}
+            onClick={() => setShowInstructions(true)}
+          >
+            {activeDevices.length ? "Connect another device" : "Connect a device"}
+          </button>
+        </div>
       </div>
       <section className="panel">
         <div className="panel-heading">
@@ -1103,6 +1126,48 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
           </div>
         </section>
       </div>
+      {measure === "1" && (
+        <Modal
+          title="Measure your first workflow"
+          close={() => setMeasure(null)}
+          wide
+        >
+          <div className="modal-body measurement-onboarding">
+            <div
+              className="measurement-harnesses"
+              role="group"
+              aria-label="Harness to measure"
+            >
+              {(["pi", "claude-code", "codex"] as Harness[]).map(
+                (harness) => (
+                  <button
+                    type="button"
+                    key={harness}
+                    aria-pressed={measurementHarness === harness}
+                    onClick={() => setMeasurementHarness(harness)}
+                  >
+                    <HarnessLabel harness={harness} />
+                  </button>
+                ),
+              )}
+            </div>
+            <div className="measurement-guide">
+              <div>
+                <h3>Collect only the workflow you choose</h3>
+                <p>
+                  Start collection before the work, finalize it locally, then
+                  sync. Loadout does not import earlier sessions.
+                </p>
+                <Copy
+                  text={measurementInstructions}
+                  label="Copy measurement instructions"
+                />
+              </div>
+              <pre>{measurementInstructions}</pre>
+            </div>
+          </div>
+        </Modal>
+      )}
       {showInstructions && (
         <Modal
           title="Connect or renew a device"

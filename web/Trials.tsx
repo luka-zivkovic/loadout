@@ -18,6 +18,7 @@ import { SetupDiff, refKey } from "./Artifacts";
 import { go, useParam } from "./navigation";
 import { ComparisonTable, RunDetail } from "./Views";
 import { HarnessLabel } from "./HarnessIcon";
+import { hasComparableSetups } from "../src/onboarding";
 
 const ref = (p: ProfileListing) => ({
   owner: p.owner,
@@ -38,16 +39,22 @@ export function Trials({
   const [creating, setCreating] = useParam("new");
   const [trialId, setTrialId] = useParam("trial");
   const [comparisonId, setComparisonId] = useParam("comparison");
+  const comparable = hasComparableSetups(data.profiles);
   return (
     <>
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Setup trials</h2>
+            <h2>Setup comparisons</h2>
             <p>Inspect → try locally → assess → decide</p>
           </div>
-          <button className="button primary" onClick={() => setCreating("1")}>
-            New comparison
+          <button
+            className="button primary"
+            onClick={() =>
+              comparable ? setCreating("1") : go("/setups?share=1")
+            }
+          >
+            {comparable ? "New comparison" : "Share a matching setup"}
           </button>
         </div>
         {data.trials.length ? (
@@ -85,9 +92,11 @@ export function Trials({
             action={
               <button
                 className="button secondary"
-                onClick={() => setCreating("1")}
+                onClick={() =>
+                  comparable ? setCreating("1") : go("/setups?share=1")
+                }
               >
-                Choose two revisions
+                {comparable ? "Choose two revisions" : "Share a matching setup"}
               </button>
             }
           >
@@ -99,10 +108,10 @@ export function Trials({
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Synced experiments</h2>
+            <h2>Synced comparison runs</h2>
             <p>
-              Complete experiment groups; the period filter selects experiments,
-              not individual members of a group.
+              Complete run groups; the period filter selects whole comparisons,
+              not individual runs.
             </p>
           </div>
         </div>
@@ -111,7 +120,7 @@ export function Trials({
             <table>
               <thead>
                 <tr>
-                  <th>Experiment</th>
+                  <th>Comparison</th>
                   <th>Setups</th>
                   <th>Runs</th>
                   <th>Evidence</th>
@@ -145,7 +154,7 @@ export function Trials({
           </div>
         ) : (
           <div className="inline-empty">
-            No synced experiment runs in this period.
+            No synced comparison runs in this period.
           </div>
         )}
       </section>
@@ -243,7 +252,7 @@ function TrialWizard({
   const baseline =
     eligible.find((p) => refKey(p) === baselineKey) ??
     eligible.find((p) => p.owner === user.actorId);
-  const [name, setName] = useState("Review setup trial");
+  const [name, setName] = useState("Review setup comparison");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   return (
@@ -272,10 +281,10 @@ function TrialWizard({
       >
         <p>
           Pick two revisions of the same harness and workflow. Inspect their
-          differences before preparing a local trial.
+          differences before preparing a local comparison.
         </p>
         <Field
-          label="Trial label"
+          label="Comparison label"
           hint="Visible to the workspace. Use a reusable label; keep task names, code, and repository paths local."
         >
           <input
@@ -335,7 +344,7 @@ function TrialWizard({
             <div className="notice">
               {(candidate.harness?.kind ?? "pi") === "pi"
                 ? "Pi can run both revisions against the same locally frozen packet. You will review the outputs locally and share assessment counts."
-                : "Native trials collect usage observations. Task context, effective configuration, and review quality are not automatically verified."}
+                : "Native comparisons collect usage observations. Task context, effective configuration, and review quality are not automatically verified."}
             </div>
             <SetupDiff baseline={baseline} candidate={candidate} />
           </>
@@ -349,7 +358,7 @@ function TrialWizard({
             className="button primary"
             disabled={busy || !baseline || !candidate}
           >
-            {busy ? "Creating…" : "Create local trial handoff"}
+            {busy ? "Creating…" : "Create local comparison handoff"}
           </button>
         </div>
       </form>
@@ -405,16 +414,17 @@ function TrialDetail({
   }, [trialId]);
   const trial = result?.trial;
   const command = `loadout team trial ${data.team.teamName} ${trialId} --scope ${data.team.scope}`;
+  const comparisonUrl = `${location.origin}/comparisons?trial=${encodeURIComponent(trialId)}`;
   const handoff = trial
-    ? `Prepare the Loadout trial “${trial.name}” using my installed local harness. Use the locally installed loadout CLI; if missing, use node /path/to/pi-share/dist/cli.js from the Loadout repository. Use my existing remote alias if it differs from ${data.team.teamName}.\n\n${trial.kind === "controlled" ? `Ask me to choose the local repository and base/head Git refs. Inspect the pinned baseline and candidate, then prepare their shared local packet with:\n${command} --repo /path/to/repository --base BASE_REF --head HEAD --prepare-only\n\nShow requirements and any configuration differences. After I choose to run the trial, repeat that command without --prepare-only. It runs both Pi setups with read-only tools and syncs metadata. Read generated reviews locally and help me enter assessment counts.` : `Run:\n${command} --prepare-only\n\nInspect the two exported native configurations and their requirements. Use each printed directory with the matching native harness and my own local authentication. Run the collector commands printed by preparation with the same --comparison ID. Choose the task locally. Stop each collector after the harness exits, then run:\nloadout team sync ${data.team.teamName} --scope ${data.team.scope}\n\nThese are observations, not a controlled equal-context comparison. Explain missing measurements and do not infer a winner from cost alone.`}\n\nKeep repository paths, code, prompts, tool output, and reviews local. Return to ${new URL(`/comparisons?trial=${trialId}`, location.origin).href} to evaluate and record a decision.`
+    ? `Prepare the Loadout comparison “${trial.name}” using my installed local harness. Use the locally installed loadout CLI; if missing, use node /path/to/pi-share/dist/cli.js from the Loadout repository. Use my existing remote alias if it differs from ${data.team.teamName}.\n\n${trial.kind === "controlled" ? `Ask me to choose the local repository and base/head Git refs. Inspect the pinned baseline and candidate, then prepare their shared local packet with:\n${command} --repo /path/to/repository --base BASE_REF --head HEAD --prepare-only\n\nShow requirements and any configuration differences. After I choose to run the comparison, repeat that command without --prepare-only. It runs both Pi setups with read-only tools and syncs metadata. Read generated reviews locally and help me enter assessment counts.` : `Run:\n${command} --prepare-only\n\nInspect the two exported native configurations and their requirements. Use each printed directory with the matching native harness and my own local authentication. Run the collector commands printed by preparation with the same --comparison ID. Choose the task locally. Stop each collector after the harness exits, then run:\nloadout team sync ${data.team.teamName} --scope ${data.team.scope}\n\nThese are observations, not a controlled equal-context comparison. Explain missing measurements and do not infer a winner from cost alone.`}\n\nKeep repository paths, code, prompts, tool output, and reviews local. Return to ${comparisonUrl} to evaluate and record a decision.`
     : "";
   return (
-    <Modal title={trial?.name ?? "Loading trial…"} close={close}>
+    <Modal title={trial?.name ?? "Loading comparison…"} close={close}>
       <div className="modal-body">
         <ErrorBox error={error} />
         {trial && result && (
           <>
-            <div className="trial-progress" aria-label="Trial progress">
+            <div className="trial-progress" aria-label="Comparison progress">
               <span className="complete">1 · Revisions selected</span>
               <span className={result.records.length ? "complete" : ""}>
                 2 ·{" "}
@@ -481,7 +491,7 @@ function TrialDetail({
               quality.
             </p>
             {trial.owner === user.actorId ? (
-              <Field label="Trial decision">
+              <Field label="Comparison decision">
                 <select
                   value={trial.conclusion ?? ""}
                   disabled={busy}
@@ -513,14 +523,12 @@ function TrialDetail({
             ) : (
               <p>
                 {trial.conclusion?.replaceAll("-", " ") ??
-                  "The trial owner has not recorded a decision."}
+                  "The comparison owner has not recorded a decision."}
               </p>
             )}
             <Copy
-              text={
-                new URL(`/comparisons?trial=${trialId}`, location.origin).href
-              }
-              label="Copy trial link"
+              text={comparisonUrl}
+              label="Copy comparison link"
             />
           </>
         )}
@@ -558,7 +566,7 @@ export function ExperimentDetail({
     void load().catch((e) => setError(e.message));
   }, [comparisonId]);
   return (
-    <Modal title={`Experiment ${short(comparisonId)}`} close={close}>
+    <Modal title={`Comparison ${short(comparisonId)}`} close={close}>
       <div className="modal-body">
         <ErrorBox error={error} />
         {result && (
@@ -578,7 +586,7 @@ export function ExperimentDetail({
                 </button>
               ))}
             </div>
-            <Copy text={location.href} label="Copy experiment link" />
+            <Copy text={location.href} label="Copy comparison link" />
           </>
         )}
         {selected && result && (

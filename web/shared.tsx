@@ -36,6 +36,7 @@ export type Dashboard = {
   nextOffset: number | null;
   offset: number;
   trials: Trial[];
+  liveRunCount: number;
   comparisons: {
     comparisonId: string;
     runs: number;

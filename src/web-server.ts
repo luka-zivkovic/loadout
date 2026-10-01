@@ -26,6 +26,11 @@ import { clientAddress } from "./proxy.js";
 
 const shortToken = z.string().max(100);
 const userCode = z.string().regex(/^[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5}$/);
+const browserSecurityHeaders = {
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
+};
 function parseUrl(value: string, message: string) {
   try {
     return new URL(value);
@@ -62,6 +67,7 @@ function json(res: ServerResponse, status: number, body: unknown) {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    ...browserSecurityHeaders,
   });
   res.end(JSON.stringify(body));
 }
@@ -531,8 +537,9 @@ export function createWebHandler(
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
+      ...browserSecurityHeaders,
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     });
     res.end(req.method === "HEAD" ? undefined : readFileSync(file));
     return true;

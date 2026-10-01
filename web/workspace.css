@@ -11,9 +11,6 @@
 .page-heading h1 {
   font-size: clamp(28px, 3vw, 38px);
 }
-.page-heading .eyebrow {
-  display: none;
-}
 .page-heading p {
   font-size: 14px;
   margin-top: 8px;
@@ -97,7 +94,7 @@
 .setup-workflow-card {
   padding: 18px 20px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-top: 2px solid var(--accent);
   background: var(--surface-2);
 }
 .setup-workflow-card h3 {
@@ -141,7 +138,7 @@
 .setup-behavior .setup-hook-warning {
   margin-top: 12px;
   padding: 10px 12px;
-  border-left: 3px solid var(--amber);
+  border: 1px solid color-mix(in oklch, var(--amber) 45%, var(--border));
   background: var(--amber-soft);
 }
 .setup-detail-content .setup-use-steps {
@@ -268,6 +265,50 @@
 }
 .page-action-row {
   margin-bottom: 18px;
+}
+.measurement-onboarding {
+  display: grid;
+  gap: 20px;
+}
+.measurement-harnesses {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.measurement-harnesses button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text-muted);
+}
+.measurement-harnesses button:hover,
+.measurement-harnesses button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+}
+.measurement-guide {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1.3fr);
+  gap: 24px;
+  align-items: start;
+}
+.measurement-guide > div {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.measurement-guide p {
+  color: var(--text-muted);
+}
+.measurement-guide pre {
+  max-height: 440px;
+  margin: 0;
+  overflow: auto;
 }
 .history-list {
   padding: 12px 0;
@@ -566,7 +607,7 @@
   margin-top: 12px;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--secondary);
+  border-top: 2px solid var(--secondary);
   background: var(--surface-2);
 }
 .bundle-path-note > svg {
@@ -806,7 +847,7 @@
 .markdown-preview blockquote {
   margin: 18px 0;
   padding: 2px 16px;
-  border-left: 3px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
   color: var(--text-muted);
 }
 .file-preview .markdown-preview pre {
@@ -1005,6 +1046,9 @@
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 20px;
 }
+.overview-next.compact {
+  grid-template-columns: minmax(0, 1fr);
+}
 .revision-feed button {
   display: grid;
   width: 100%;
@@ -1025,13 +1069,60 @@
 .revision-feed strong {
   font-size: 15px;
 }
-.next-actions {
+.onboarding-body {
   display: grid;
-  gap: 20px;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.25fr);
+  min-height: 210px;
 }
-.next-actions p {
+.readiness-list {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  border-right: 1px solid var(--border);
+}
+.readiness-list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  min-height: 42px;
+  padding: 7px 18px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.readiness-list li > span {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+}
+.readiness-list li.complete {
+  color: var(--text);
+}
+.readiness-list li.complete > span {
+  border-color: var(--secondary);
+  color: var(--green);
+}
+.next-action {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 24px;
+}
+.next-action strong {
+  font-size: 18px;
+}
+.next-action p {
+  max-width: 54ch;
+  color: var(--text-muted);
   font-size: 13px;
-  margin: 6px 0;
+}
+.next-action small {
+  color: var(--text-faint);
 }
 .metric-grid {
   gap: 16px;
@@ -1066,6 +1157,9 @@ pre:focus-visible {
 }
 @media (max-width: 900px) {
   .overview-next {
+    grid-template-columns: 1fr;
+  }
+  .measurement-guide {
     grid-template-columns: 1fr;
   }
   .skill-package-layout {
@@ -1110,6 +1204,16 @@ pre:focus-visible {
   .comparison-scroll-hint {
     display: block;
     margin-top: 16px;
+  }
+  .onboarding-body {
+    grid-template-columns: 1fr;
+  }
+  .readiness-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .measurement-harnesses {
+    grid-template-columns: 1fr;
   }
   .comparison-matrix th:first-child {
     min-width: 110px;
@@ -1230,5 +1334,19 @@ pre:focus-visible {
 @media (max-width: 480px) {
   .setup-detail-page .detail-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (pointer: coarse) {
+  .button,
+  .text-button,
+  .icon-button,
+  .nav-item,
+  .file-view-toggle button,
+  .skill-file-section button {
+    min-height: 44px;
+  }
+  .icon-button {
+    width: 44px;
+    height: 44px;
   }
 }

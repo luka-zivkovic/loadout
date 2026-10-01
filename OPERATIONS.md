@@ -6,8 +6,9 @@ Loadout is a single-process, self-hosted team service. Existing registry identit
 
 1. Stop the service and copy its entire registry directory to private backup storage. Keep secrets in the backup protected just as on the server.
 2. Build with the supported Node version: `npm run check && npm test`.
-3. Deploy both `dist` and `web/dist`. Start the service with its existing `--data`, public origin, and scope. Startup adds/backfills the operations tables and catalogue metadata once.
-4. Run the read-only preflight with the same deployment settings:
+3. On a dedicated dashboard host, install only the server runtime after building: `npm ci --ignore-scripts --omit=dev --omit=optional`. The optional Pi agent runtime is needed on machines that execute controlled Pi comparisons, not on the dashboard server. Confirm the deployed dependency set with `npm audit --omit=dev --omit=optional`. That dashboard audit does not cover the optional runner; runner hosts must review the full production audit separately.
+4. Deploy both `dist` and `web/dist`. Start the service with its existing `--data`, public origin, and scope. Startup adds/backfills the operations tables and catalogue metadata once.
+5. Run the read-only preflight with the same deployment settings:
 
 ```sh
 loadout registry doctor --data /private/loadout-registry \
@@ -16,7 +17,7 @@ loadout registry doctor --data /private/loadout-registry \
 
 It checks directory/database permissions, SQLite integrity, operations schema, built dashboard, and origin/proxy syntax. Failed checks return a nonzero exit code. It does not change permissions or migrate the database. Warnings require operator review: a local check cannot verify TLS termination, proxy routing, service supervision, or a successful backup restore.
 
-Set the trusted proxy IP to the actual socket peer, not a blanket network or client-supplied name. The proxy must preserve the public Host header and replace or append X-Forwarded-For with the true connecting address. Forwarded headers from an untrusted socket are ignored. Keep the Node port inaccessible to untrusted direct clients. See [AUTH.md](AUTH.md) for browser origin checks and auth limits.
+Keep the public endpoint behind a VPN or identity-aware access proxy unless your organization explicitly accepts password-only access without MFA. Set HSTS at the HTTPS proxy after validating the domain. Set the trusted proxy IP to the actual socket peer, not a blanket network or client-supplied name. The proxy must preserve the public Host header and replace or append X-Forwarded-For with the true connecting address. Forwarded headers from an untrusted socket are ignored. Keep the Node port inaccessible to untrusted direct clients. See [AUTH.md](AUTH.md) for browser origin checks and auth limits.
 
 ## Withdraw and purge shared content
 

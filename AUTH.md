@@ -1,6 +1,6 @@
 # Dashboard, accounts, and device connection
 
-Loadout 0.3 serves its dashboard from the same Node server and SQLite registry as the CLI API. One installation is one team and one work/personal scope. Authentication does not depend on a cloud account or an email provider.
+Loadout 0.4 serves its dashboard from the same Node server and SQLite registry as the CLI API. One installation is one team and one work/personal scope. Authentication does not depend on a cloud account or an email provider.
 
 The onboarding model combines **a host-issued first-admin link**, **admin-created invitations**, and **browser-approved device credentials**. Admins choose who can join and which role they receive. Each person chooses their own password; harnesses never need that password.
 
@@ -97,7 +97,7 @@ Open the private link written to `reset-link.txt` in the registry directory. The
 
 ## Deployment
 
-For another device to connect, put the Node server behind an HTTPS reverse proxy and set its exact browser-visible origin:
+For another device to connect, put the Node server behind an HTTPS reverse proxy and set its exact browser-visible origin. For an internal team deployment, also keep the service behind a VPN or identity-aware access proxy; Loadout's local password authentication does not currently provide MFA or SSO:
 
 ```sh
 node dist/cli.js serve --data ~/.pi-share-registry/work \
@@ -105,7 +105,7 @@ node dist/cli.js serve --data ~/.pi-share-registry/work \
   --public-url https://share.example.com --trusted-proxy 127.0.0.1
 ```
 
-Proxy `/`, `/assets`, `/api`, and `/v1` to that server and **preserve the public Host header**. API browser mutations require that exact Origin; forwarded-host headers are not trusted. Use a single origin without a path prefix. Non-loopback public URLs require HTTPS. Browser cookies use HttpOnly, SameSite=Lax, and Secure with an HTTPS public URL; they expire after 7 days. The service does not implement TLS termination itself.
+Proxy `/`, `/assets`, `/api`, and `/v1` to that server and **preserve the public Host header**. Set HSTS at the HTTPS proxy after confirming the domain is served only over HTTPS. API browser mutations require that exact Origin; forwarded-host headers are not trusted. Use a single origin without a path prefix. Non-loopback public URLs require HTTPS. Browser cookies use HttpOnly, SameSite=Lax, and Secure with an HTTPS public URL; they expire after 7 days. The service does not implement TLS termination itself.
 
 Retain the built `web/dist` alongside `dist` when deploying. Do not expose the registry directory, setup-link files, or client connection files as static assets. The built-in file handler serves only application pages and bundled assets. Its CSP restricts scripts/connections to the same origin and blocks framing. No third-party fonts, trackers, or session replay scripts are included.
 
