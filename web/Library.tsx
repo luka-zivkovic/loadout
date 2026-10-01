@@ -284,7 +284,9 @@ export function Setups({ data, refresh, user }: LibraryProps) {
     "profile",
     data.profiles,
   );
-  const [publish, setPublish] = useState(false);
+  const [share, setShare] = useParam("share");
+  const publish = share === "1";
+  const setPublish = (open: boolean) => setShare(open ? "1" : null);
   const list = data.profiles
     .filter(
       (p) =>
@@ -301,10 +303,7 @@ export function Setups({ data, refresh, user }: LibraryProps) {
       <ErrorBox error={selectionError} />
       <section className="setup-library" aria-label="Shared setup registry">
         <div className="collection-heading">
-          <div>
-            <span className="section-kicker">Configuration registry</span>
-            <p>Inspect a revision. Try it locally. Keep what works.</p>
-          </div>
+          <p>Inspect a revision. Try it locally. Keep what works.</p>
           <div className="row-actions">
             <button
               className="icon-button"

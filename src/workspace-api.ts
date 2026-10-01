@@ -39,6 +39,15 @@ export function workspaceApi(
         summary: analyticsSummary(registry.db, url),
         comparisons: comparisonList(registry.db, url),
         trials: ops.trials(),
+        liveRunCount: Number(
+          (
+            registry.db
+              .prepare(
+                "SELECT COUNT(*) AS total FROM runs WHERE json_extract(body,'$.mode')='live'",
+              )
+              .get() as { total: number }
+          ).total,
+        ),
         days: f.days,
         mode: f.mode,
         truncated: false,
@@ -140,7 +149,7 @@ export function workspaceApi(
     });
     registry.skill(ref.owner, ref.name, ref.revision);
     // Skill history has its own explicit period/mode; catalogue compatibility cannot filter observations.
-    const filters = new URL(url);
+    const filters = url;
     for (const k of ["harness", "query", "owner", "setup", "workflow"])
       filters.searchParams.delete(k);
     filters.searchParams.set("skill", ref.revision);
@@ -205,9 +214,19 @@ export function workspaceApi(
       .prepare("SELECT body FROM runs WHERE run_id=?")
       .get(run[1]!);
     if (!row) throw new TeamError(404, "not_found", "Run not found.");
+    let record;
+    try {
+      record = metricsSchema.parse(JSON.parse(String(row.body)));
+    } catch {
+      throw new TeamError(
+        500,
+        "invalid_record",
+        "The stored run record is invalid.",
+      );
+    }
     return {
       value: {
-        record: metricsSchema.parse(JSON.parse(String(row.body))),
+        record,
         assessments: assessmentsFor(registry.db, [run[1]!]),
       },
     };

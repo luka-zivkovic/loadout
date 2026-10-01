@@ -784,11 +784,25 @@ test("dashboard serves private metadata, separates demo data, exposes scores, an
   assert(
     !JSON.stringify(dashboard.value).includes("PRIVATE_CONVERSATION_SENTINEL"),
   );
+  const demoDashboard = await f.call(
+    "/api/dashboard?mode=demo&days=30",
+    undefined,
+    member,
+  );
   assert.deepEqual(
-    (
-      await f.call("/api/dashboard?mode=demo&days=30", undefined, member)
-    ).value.records.map((r) => r.runId),
+    demoDashboard.value.records.map((r) => r.runId),
     [demo.runId],
+  );
+  const filteredDashboard = await f.call(
+    "/api/dashboard?mode=demo&days=7&harness=codex",
+    undefined,
+    member,
+  );
+  assert.equal(filteredDashboard.value.records.length, 0);
+  assert.equal(
+    filteredDashboard.value.liveRunCount,
+    1,
+    "workspace readiness must ignore the current period, harness, and demo filters",
   );
   const setup = await f.call(
     `/api/setups/admin/review/${profile.revision}`,
@@ -866,7 +880,14 @@ test("dashboard serves private metadata, separates demo data, exposes scores, an
     html.headers.get("content-security-policy"),
     /frame-ancestors 'none'/,
   );
+  assert.match(html.headers.get("content-security-policy"), /object-src 'none'/);
   assert.equal(html.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(
+    html.headers.get("permissions-policy"),
+    "camera=(), microphone=(), geolocation=()",
+  );
+  assert.equal(html.headers.get("cross-origin-opener-policy"), "same-origin");
+  assert.equal(html.headers.get("cross-origin-resource-policy"), "same-origin");
   const content = await html.text();
   assert.match(content, /<title>Loadout/);
   const asset = content.match(/src="(\/assets\/[^" ]+\.js)"/)[1];

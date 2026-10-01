@@ -36,7 +36,7 @@ The dashboard runs at `http://127.0.0.1:4318`. Open the private installation URL
 
 Open **My devices** for instructions you can give to your local Pi, Claude Code, or Codex. Each device connects through your browser approval. Connecting a device doesn't publish its configuration or sync existing data.
 
-To connect from other machines, deploy the server behind HTTPS. The [account and deployment guide](AUTH.md) covers setup links, invitations, device access, and the reverse proxy configuration.
+To connect from other machines, deploy the server behind HTTPS and a private network or identity-aware access proxy. The [account and deployment guide](AUTH.md) covers setup links, invitations, device access, and the reverse proxy configuration. A dedicated dashboard host can omit the optional Pi runner dependency after building; see [Operations](OPERATIONS.md).
 
 ## From your setup to a teammate's machine
 

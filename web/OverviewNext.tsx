@@ -1,13 +1,64 @@
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  hasComparableSetups,
+  nextWorkspaceStep,
+  type WorkspaceStep,
+} from "../src/onboarding";
 import { api, date, short, type Dashboard } from "./shared";
 import { artifactUrl } from "./navigation";
 import { HarnessLabel } from "./HarnessIcon";
+
+const stepCopy: Record<
+  WorkspaceStep,
+  { title: string; description: string; action: string }
+> = {
+  "connect-device": {
+    title: "Connect your first device",
+    description:
+      "Authorize one local harness. Connecting does not publish configurations or upload existing activity.",
+    action: "Connect a device",
+  },
+  "publish-setup": {
+    title: "Share your first setup",
+    description:
+      "Capture a reusable configuration, inspect its contents, then publish that exact revision.",
+    action: "Share a setup",
+  },
+  "continue-trial": {
+    title: "Finish the comparison in progress",
+    description:
+      "Complete its local runs, inspect the evidence, and record a decision before starting another.",
+    action: "Continue comparison",
+  },
+  "measure-run": {
+    title: "Sync your first measured run",
+    description:
+      "Start collection before the work, finalize it locally, then sync the resulting metadata.",
+    action: "Start measuring",
+  },
+  "publish-comparable": {
+    title: "Add a comparable setup",
+    description:
+      "Share another revision with the same harness and workflow before creating a comparison.",
+    action: "Share another setup",
+  },
+  "start-trial": {
+    title: "Compare two setups",
+    description:
+      "Use compatible revisions, run the task locally, and record what the evidence supports.",
+    action: "Start a comparison",
+  },
+};
+
 export function OverviewNext({
   data,
   navigate,
+  showSetups = true,
 }: {
   data: Dashboard;
   navigate: (path: string) => void;
+  showSetups?: boolean;
 }) {
   const [devices, setDevices] = useState<
     | { revokedAt: string | null; expiresAt: string; syncedAt: string | null }[]
@@ -16,103 +67,131 @@ export function OverviewNext({
   useEffect(() => {
     let live = true;
     api("/devices")
-      .then((r) => {
-        if (live) setDevices(r.devices);
+      .then((response) => {
+        if (live) setDevices(response.devices);
       })
       .catch(() => {
-        if (live) setDevices(null);
+        if (live) setDevices([]);
       });
     return () => {
       live = false;
     };
   }, [data]);
   const active = devices?.filter(
-    (d) => !d.revokedAt && Date.parse(d.expiresAt) > Date.now(),
+    (device) =>
+      !device.revokedAt && Date.parse(device.expiresAt) > Date.now(),
   );
   const lastSync = active
-    ?.flatMap((d) => (d.syncedAt ? [d.syncedAt] : []))
+    ?.flatMap((device) => (device.syncedAt ? [device.syncedAt] : []))
     .sort()
     .at(-1);
-  const pending = data.trials.filter((t) => !t.conclusion).slice(0, 3);
+  const pending = data.trials.filter((trial) => !trial.conclusion);
+  const comparable = hasComparableSetups(data.profiles);
+  const step =
+    devices === null
+      ? null
+      : nextWorkspaceStep({
+          deviceReady: Boolean(active?.length),
+          setupCount: data.profiles.length,
+          runCount: data.liveRunCount,
+          comparable,
+          pendingTrialCount: pending.length,
+        });
+  const nextPath = step
+    ? step === "connect-device"
+      ? "/devices"
+      : step === "publish-setup" || step === "publish-comparable"
+        ? "/setups?share=1"
+        : step === "measure-run"
+          ? "/devices?measure=1"
+          : step === "continue-trial"
+            ? pending[0]
+              ? `/comparisons?trial=${pending[0].trialId}`
+              : "/comparisons"
+            : "/comparisons?new=1"
+    : "";
+  const readiness = [
+    { label: "Device connected", done: Boolean(active?.length) },
+    { label: "Setup shared", done: Boolean(data.profiles.length) },
+    { label: "First run synced", done: Boolean(data.liveRunCount) },
+    { label: "Ready to compare", done: comparable },
+  ];
   return (
-    <div className="overview-next">
-      <section className="panel">
+    <div className={`overview-next${showSetups ? "" : " compact"}`}>
+      <section className="panel onboarding-panel">
         <div className="panel-heading">
           <div>
-            <h2>Latest shared revisions</h2>
-            <p>Inspect what changed before trying it locally.</p>
+            <h2>
+              {data.liveRunCount
+                ? "Your next useful step"
+                : "Get to your first shared run"}
+            </h2>
+            <p>Complete one real step at a time. Advanced tools can wait.</p>
           </div>
-          <button className="text-button" onClick={() => navigate("/setups")}>
-            Browse library
-          </button>
         </div>
-        <div className="revision-feed">
-          {data.profiles.slice(0, 3).map((p) => (
-            <button
-              key={p.owner + p.revision}
-              onClick={() => navigate(artifactUrl("profile", p))}
-            >
-              <HarnessLabel harness={p.harness?.kind ?? "pi"} />
-              <strong>{p.name}</strong>
-              <span>
-                {p.owner} · {short(p.revision)} · {date(p.publishedAt)}
-              </span>
-            </button>
-          ))}
-          {!data.profiles.length && (
-            <p>Publish a reusable setup to start the team library.</p>
-          )}
+        <div className="onboarding-body">
+          <ol className="readiness-list">
+            {readiness.map((item) => (
+              <li className={item.done ? "complete" : ""} key={item.label}>
+                <span aria-hidden="true">
+                  {item.done ? <Check size={14} /> : null}
+                </span>
+                {item.label}
+              </li>
+            ))}
+          </ol>
+          <div className="next-action">
+            {step ? (
+              <>
+                <strong>{stepCopy[step].title}</strong>
+                <p>{stepCopy[step].description}</p>
+                <button
+                  className="button primary"
+                  onClick={() => navigate(nextPath)}
+                >
+                  {stepCopy[step].action}
+                </button>
+              </>
+            ) : (
+              <p>Checking workspace readiness…</p>
+            )}
+            {lastSync && (
+              <small>Last successful device sync {date(lastSync)}</small>
+            )}
+          </div>
         </div>
       </section>
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>Continue your work</h2>
-        </div>
-        <div className="panel-body next-actions">
-          <div>
-            <strong>
-              {active
-                ? `${active.length} authorized ${active.length === 1 ? "device" : "devices"}`
-                : "Device status"}
-            </strong>
-            <p className="muted">
-              {lastSync
-                ? `Latest reported sync ${date(lastSync)}`
-                : "No successful sync reported yet."}
-            </p>
-            <button
-              className="text-button"
-              onClick={() => navigate("/devices")}
-            >
-              Review devices and sync
-            </button>
-          </div>
-          {pending.map((t) => (
-            <div key={t.trialId}>
-              <button
-                className="text-button"
-                onClick={() => navigate(`/comparisons?trial=${t.trialId}`)}
-              >
-                {t.name}
-              </button>
-              <p className="muted">Awaiting evaluation · {t.owner}</p>
-            </div>
-          ))}
-          {!pending.length && (
+      {showSetups && (
+        <section className="panel">
+          <div className="panel-heading">
             <div>
-              <p className="muted">
-                Compare one colleague’s revision with your own setup.
-              </p>
-              <button
-                className="button primary"
-                onClick={() => navigate("/comparisons?new=1")}
-              >
-                Start a setup trial
-              </button>
+              <h2>Latest shared revisions</h2>
+              <p>Inspect what changed before trying it locally.</p>
             </div>
-          )}
-        </div>
-      </section>
+            <button className="text-button" onClick={() => navigate("/setups")}>
+              Browse library
+            </button>
+          </div>
+          <div className="revision-feed">
+            {data.profiles.slice(0, 3).map((profile) => (
+              <button
+                key={profile.owner + profile.revision}
+                onClick={() => navigate(artifactUrl("profile", profile))}
+              >
+                <HarnessLabel harness={profile.harness?.kind ?? "pi"} />
+                <strong>{profile.name}</strong>
+                <span>
+                  {profile.owner} · {short(profile.revision)} ·{" "}
+                  {date(profile.publishedAt)}
+                </span>
+              </button>
+            ))}
+            {!data.profiles.length && (
+              <p>Published setup revisions will appear here.</p>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

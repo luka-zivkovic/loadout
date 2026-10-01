@@ -5,16 +5,13 @@ import {
   Activity,
   ArrowRight,
   BarChart3,
-  Box,
   Code2,
-  ContactRound,
   Cpu,
   GitCompareArrows,
   Layers,
   LogOut,
   Monitor,
   Menu,
-  Plus,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -45,16 +42,23 @@ import loadoutMark from "./assets/loadout.svg";
 import { harnessLabels } from "../src/schema";
 import { ActivityView, Comparisons, Devices, TeamAccess } from "./Views";
 import { People } from "./People";
+import { hasComparableSetups } from "../src/onboarding";
 
 const routes = [
   { path: "/", label: "Overview", icon: BarChart3 },
   { path: "/setups", label: "Shared setups", icon: Layers },
   { path: "/skills", label: "Shared skills", icon: Sparkles },
-  { path: "/people", label: "People", icon: ContactRound },
+  { path: "/people", label: "People", icon: Users, hidden: true },
   { path: "/activity", label: "Activity", icon: Activity },
   { path: "/comparisons", label: "Comparisons", icon: GitCompareArrows },
   { path: "/devices", label: "My devices", icon: Monitor },
   { path: "/team", label: "Team & access", icon: Users },
+];
+const navigationGroups = [
+  { label: "", paths: ["/"] },
+  { label: "Library", paths: ["/setups", "/skills"] },
+  { label: "Evidence", paths: ["/activity", "/comparisons"] },
+  { label: "Workspace", paths: ["/people", "/devices", "/team"] },
 ];
 function Brand() {
   return (
@@ -79,35 +83,51 @@ function Brand() {
 function Navigation({
   path,
   admin,
+  comparisonAvailable,
   navigate,
 }: {
   path: string;
   admin: boolean;
+  comparisonAvailable: boolean;
   navigate: (path: string) => void;
 }) {
   return (
     <nav aria-label="Workspace navigation">
-      {routes
-        .filter((r) => r.path !== "/team" || admin)
-        .map((r, index) => (
-          <a
-            key={r.path}
-            href={r.path}
-            title={r.label}
-            aria-current={r.path === path ? "page" : undefined}
-            className={r.path === path ? "nav-item active" : "nav-item"}
-            onClick={(e) => {
-              e.preventDefault();
-              navigate(r.path);
-            }}
-          >
-            <r.icon size={17} aria-hidden="true" />
-            <span>{r.label}</span>
-            <span className="nav-index" aria-hidden="true">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-          </a>
-        ))}
+      {navigationGroups.map((group) => {
+        const items = routes.filter(
+          (route) =>
+            group.paths.includes(route.path) &&
+            (!route.hidden || route.path === path) &&
+            (route.path !== "/team" || admin) &&
+            (route.path !== "/comparisons" ||
+              comparisonAvailable ||
+              route.path === path),
+        );
+        if (!items.length) return null;
+        return (
+          <div className="nav-group" key={group.label || "overview"}>
+            {group.label && <span>{group.label}</span>}
+            {items.map((route) => (
+              <a
+                key={route.path}
+                href={route.path}
+                title={route.label}
+                aria-current={route.path === path ? "page" : undefined}
+                className={
+                  route.path === path ? "nav-item active" : "nav-item"
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(route.path);
+                }}
+              >
+                <route.icon size={17} aria-hidden="true" />
+                <span>{route.label}</span>
+              </a>
+            ))}
+          </div>
+        );
+      })}
     </nav>
   );
 }
@@ -169,7 +189,6 @@ function Auth({
       <aside className="auth-story">
         <Brand />
         <div>
-          <span className="eyebrow">A SHARED WAY TO WORK</span>
           <h1>
             Your team’s
             <br />
@@ -205,15 +224,6 @@ function Auth({
           {session.team.teamName} / {session.team.scope}
         </span>
         <div className="auth-form">
-          <div className="eyebrow">
-            {kind === "setup"
-              ? "FIRST-TIME SETUP"
-              : kind === "join"
-                ? "YOU’RE INVITED"
-                : kind === "reset"
-                  ? "ACCOUNT RECOVERY"
-                  : "WELCOME BACK"}
-          </div>
           <h1>
             {unavailable
               ? "This link is unavailable"
@@ -462,6 +472,9 @@ export default function App() {
       />
     );
   const user = session.user;
+  const comparisonAvailable = Boolean(
+    data?.trials.length || hasComparableSetups(data?.profiles ?? []),
+  );
   const activePath = setupPage ? "/setups" : path;
   const active = routes.find((route) => route.path === activePath) ?? routes[0];
   const logout = () =>
@@ -491,10 +504,10 @@ export default function App() {
             <small>{session.team.scope} workspace</small>
           </div>
         </div>
-        <div className="nav-caption">Workspace index</div>
         <Navigation
           path={active.path}
           admin={user.role === "admin"}
+          comparisonAvailable={comparisonAvailable}
           navigate={navigate}
         />
         <div className="sidebar-bottom">
@@ -506,13 +519,20 @@ export default function App() {
             </div>
           </div>
           <div className="account">
-            <span className="avatar">
-              {user.name.slice(0, 2).toUpperCase()}
-            </span>
-            <div>
-              <strong>{user.name}</strong>
-              <small>{user.role}</small>
-            </div>
+            <button
+              type="button"
+              className="account-profile"
+              onClick={() => navigate("/people")}
+              aria-label="Open your profile and team directory"
+            >
+              <span className="avatar">
+                {user.name.slice(0, 2).toUpperCase()}
+              </span>
+              <span>
+                <strong>{user.name}</strong>
+                <small>{user.role}</small>
+              </span>
+            </button>
             <button
               className="icon-button"
               aria-label="Sign out"
@@ -547,19 +567,6 @@ export default function App() {
         <main className="content" id="workspace-content" tabIndex={-1}>
           <div className="page-heading">
             <div>
-              <span className="eyebrow">
-                <span className="page-index">
-                  {String(routes.indexOf(active) + 1).padStart(2, "0")}
-                </span>{" "}
-                /{" "}
-                {["/setups", "/skills"].includes(active.path)
-                  ? "TEAM LIBRARY"
-                  : active.path === "/comparisons"
-                    ? "EXPERIMENTS"
-                    : ["/people", "/devices", "/team"].includes(active.path)
-                      ? "WORKSPACE"
-                      : "TEAM ACTIVITY"}
-              </span>
               <h1>
                 {setupPage
                   ? `${setupPage.owner} / ${setupPage.name}`
@@ -621,33 +628,20 @@ export default function App() {
           <ErrorBox error={error} />
           {!["/people", "/devices", "/team", "/setups"].includes(active.path) && (
             <div className="toolbar">
-              <div
-                className="segmented"
-                role="group"
-                aria-label="Activity source"
-              >
-                <button
-                  className={mode === "live" ? "selected" : ""}
-                  aria-pressed={mode === "live"}
-                  onClick={() => {
-                    setData(null);
-                    setMode("live");
-                  }}
-                >
-                  <span className="status-dot" aria-hidden="true" /> Live
-                  activity
-                </button>
-                <button
-                  className={mode === "demo" ? "selected" : ""}
-                  aria-pressed={mode === "demo"}
-                  onClick={() => {
-                    setData(null);
-                    setMode("demo");
-                  }}
-                >
-                  Demo activity
-                </button>
-              </div>
+              {mode === "demo" && (
+                <div className="demo-source">
+                  <span>Viewing isolated demo activity</span>
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setData(null);
+                      setMode("live");
+                    }}
+                  >
+                    Return to live data
+                  </button>
+                </div>
+              )}
               <div className="toolbar-right">
                 {!["/setups", "/skills"].includes(active.path) && (
                   <select
@@ -772,17 +766,25 @@ export default function App() {
               <Navigation
                 path={active.path}
                 admin={user.role === "admin"}
+                comparisonAvailable={comparisonAvailable}
                 navigate={navigate}
               />
             </div>
             <div className="account spaced">
-              <span className="avatar">
-                {user.name.slice(0, 2).toUpperCase()}
-              </span>
-              <div>
-                <strong>{user.name}</strong>
-                <small>{user.role}</small>
-              </div>
+              <button
+                type="button"
+                className="account-profile"
+                onClick={() => navigate("/people")}
+                aria-label="Open your profile and team directory"
+              >
+                <span className="avatar">
+                  {user.name.slice(0, 2).toUpperCase()}
+                </span>
+                <span>
+                  <strong>{user.name}</strong>
+                  <small>{user.role}</small>
+                </span>
+              </button>
               <button
                 className="icon-button"
                 aria-label="Sign out"
@@ -805,6 +807,8 @@ function Overview({
   navigate: (s: string) => void;
 }) {
   const totals = data.summary;
+  if (!data.liveRunCount)
+    return <OverviewNext data={data} navigate={navigate} />;
   const totalCost = totals.spend;
   const missing = totals.runs - totals.pricedRuns;
   const toolCalls = totals.toolCalls;
@@ -831,7 +835,7 @@ function Overview({
   const missingSkills = totals.missingSkills;
   return (
     <>
-      <OverviewNext data={data} navigate={navigate} />
+      <OverviewNext data={data} navigate={navigate} showSetups={false} />
       <div className="metric-grid">
         {[
           {

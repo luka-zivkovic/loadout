@@ -22,6 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && vite build --config web/vite.config.ts",
     "check": "tsc --noEmit -p tsconfig.json && tsc -p web/tsconfig.json",
+    "security:check": "npm audit --omit=dev --omit=optional",
     "test": "npm run build && node --test test/*.test.mjs",
     "start": "node dist/cli.js",
     "demo": "npm run build && node dist/cli.js demo",
@@ -29,7 +30,6 @@
     "dashboard": "npm run build && node dist/cli.js serve --data .registry --team pi-share --scope work"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.85.1",
     "@fontsource/oxanium": "5.3.0",
     "@fontsource/source-code-pro": "5.3.0",
     "lucide-react": "0.577.0",
@@ -47,5 +47,8 @@
     "@vitejs/plugin-react": "6.1.1",
     "typescript": "5.9.3",
     "vite": "8.2.2"
+  },
+  "optionalDependencies": {
+    "@earendil-works/pi-coding-agent": "0.99.2"
   }
 }
