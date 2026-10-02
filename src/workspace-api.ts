@@ -178,13 +178,13 @@ export function workspaceApi(
   }
   if (path === "/api/skill-requests") {
     if (method === "GET")
-      return { value: { requests: ops.skillRequests(user.actorId) } };
+      return { value: ops.skillRequests(user.actorId, url.searchParams.get("cursor")) };
     if (method === "POST")
       return { value: { request: ops.createSkillRequest(user.actorId, input) } };
   }
   const request = /^\/api\/skill-requests\/([^/]+)$/.exec(path);
   if (request && method === "GET")
-    return { value: { request: ops.skillRequest(user.actorId, request[1]!) } };
+    return { value: { request: ops.skillRequest(user.actorId, request[1]!, url.searchParams.get("cursor")) } };
   const requestAction =
     /^\/api\/skill-requests\/([^/]+)\/(interest|comments|archive)$/.exec(path);
   if (requestAction && method === "POST") {

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { canonical } from "./files.js";
 import {
@@ -77,6 +78,28 @@ const skillRequestSelect = `SELECT r.*,u.name AS author_name,
   (SELECT COUNT(*) FROM skill_request_comments c WHERE c.request_id=r.id AND c.hidden_at IS NULL) AS comment_count,
   EXISTS(SELECT 1 FROM skill_request_interest i WHERE i.request_id=r.id AND i.actor=?) AS interested
   FROM skill_requests r LEFT JOIN web_users u ON u.actor_id=r.actor`;
+const requestPageSize = 20;
+const commentPageSize = 30;
+const pageCursorSchema = z.object({
+  createdAt: z.iso.datetime(),
+  id: z.uuid(),
+}).strict();
+function decodePageCursor(value?: string | null) {
+  if (value == null) return null;
+  if (!value || value.length > 256 || !/^[A-Za-z0-9_-]+$/.test(value))
+    throw new TeamError(400, "invalid_cursor", "Invalid page cursor.");
+  try {
+    return pageCursorSchema.parse(JSON.parse(Buffer.from(value, "base64url").toString("utf8")));
+  } catch {
+    throw new TeamError(400, "invalid_cursor", "Invalid page cursor.");
+  }
+}
+function encodePageCursor(row: Record<string, unknown>) {
+  return Buffer.from(JSON.stringify({
+    createdAt: String(row.created_at),
+    id: String(row.id),
+  })).toString("base64url");
+}
 const fail = (status: number, code: string, message: string): never => {
   throw new TeamError(status, code, message);
 };
@@ -100,7 +123,9 @@ export class Operations {
       CREATE INDEX IF NOT EXISTS assessments_run ON assessments(run_id);
       CREATE INDEX IF NOT EXISTS withdrawals_revision ON withdrawals(kind,revision);`);
     db.exec(`CREATE INDEX IF NOT EXISTS skill_requests_recent ON skill_requests(archived_at,created_at DESC);
-      CREATE INDEX IF NOT EXISTS skill_request_comments_recent ON skill_request_comments(request_id,created_at);`);
+      CREATE INDEX IF NOT EXISTS skill_request_comments_recent ON skill_request_comments(request_id,created_at);
+      CREATE INDEX IF NOT EXISTS skill_requests_page ON skill_requests(archived_at,created_at DESC,id DESC);
+      CREATE INDEX IF NOT EXISTS skill_request_comments_page ON skill_request_comments(request_id,hidden_at,created_at DESC,id DESC);`);
     // Backfill metadata once. Browsing never decodes all bundled file bodies.
     for (const r of db
       .prepare(
@@ -597,9 +622,8 @@ export class Operations {
       )
       .all(ref.owner, ref.name, ref.revision);
   }
-  private requestView(row: Record<string, unknown>, viewer: string) {
+  private requestView(row: Record<string, unknown>, viewer: string, admin = this.isAdmin(viewer)) {
     const anonymous = Boolean(row.anonymous);
-    const admin = this.isAdmin(viewer);
     return {
       id: String(row.id),
       title: String(row.title),
@@ -615,39 +639,59 @@ export class Operations {
       interested: Boolean(row.interested),
     };
   }
-  private commentView(row: Record<string, unknown>, viewer: string) {
+  private commentView(row: Record<string, unknown>, viewer: string, admin = this.isAdmin(viewer)) {
     const anonymous = Boolean(row.anonymous);
     return {
       id: String(row.id),
       body: String(row.body),
       anonymous,
       author: anonymous ? "Anonymous" : String(row.author_name ?? row.actor),
-      ...(anonymous && this.isAdmin(viewer)
+      ...(anonymous && admin
         ? { moderatorAuthor: String(row.actor) }
         : {}),
       mine: row.actor === viewer,
       createdAt: String(row.created_at),
     };
   }
-  skillRequests(viewer: string) {
-    return this.db
-      .prepare(`${skillRequestSelect} WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.id DESC`)
-      .all(viewer)
-      .map((row) => this.requestView(row, viewer));
+  skillRequests(viewer: string, cursor?: string | null) {
+    const before = decodePageCursor(cursor);
+    const rows = this.db
+      .prepare(`${skillRequestSelect} WHERE r.archived_at IS NULL
+        ${before ? "AND (r.created_at<? OR (r.created_at=? AND r.id<?))" : ""}
+        ORDER BY r.created_at DESC,r.id DESC LIMIT ?`)
+      .all(viewer, ...(before ? [before.createdAt, before.createdAt, before.id] : []), requestPageSize + 1);
+    const page = rows.slice(0, requestPageSize);
+    const total = this.db.prepare("SELECT COUNT(*) AS total FROM skill_requests WHERE archived_at IS NULL").get()!;
+    const admin = this.isAdmin(viewer);
+    return {
+      requests: page.map((row) => this.requestView(row, viewer, admin)),
+      total: Number(total.total),
+      nextCursor: rows.length > requestPageSize ? encodePageCursor(page.at(-1)!) : null,
+    };
   }
-  skillRequest(viewer: string, requestId: string) {
+  skillRequest(viewer: string, requestId: string, cursor?: string | null) {
     z.uuid().parse(requestId);
+    const before = decodePageCursor(cursor);
     const row = this.db
       .prepare(`${skillRequestSelect} WHERE r.id=?`)
       .get(viewer, requestId);
     if (!row) return fail(404, "not_found", "Skill request not found.");
-    const comments = this.db
+    const rows = this.db
       .prepare(
-        "SELECT c.*,u.name AS author_name FROM skill_request_comments c LEFT JOIN web_users u ON u.actor_id=c.actor WHERE c.request_id=? AND c.hidden_at IS NULL ORDER BY c.created_at,c.id",
+        `SELECT c.*,u.name AS author_name FROM skill_request_comments c
+         LEFT JOIN web_users u ON u.actor_id=c.actor
+         WHERE c.request_id=? AND c.hidden_at IS NULL
+         ${before ? "AND (c.created_at<? OR (c.created_at=? AND c.id<?))" : ""}
+         ORDER BY c.created_at DESC,c.id DESC LIMIT ?`,
       )
-      .all(requestId)
-      .map((comment) => this.commentView(comment, viewer));
-    return { ...this.requestView(row, viewer), comments };
+      .all(requestId, ...(before ? [before.createdAt, before.createdAt, before.id] : []), commentPageSize + 1);
+    const page = rows.slice(0, commentPageSize);
+    const admin = this.isAdmin(viewer);
+    return {
+      ...this.requestView(row, viewer, admin),
+      comments: page.map((comment) => this.commentView(comment, viewer, admin)),
+      nextCommentCursor: rows.length > commentPageSize ? encodePageCursor(page.at(-1)!) : null,
+    };
   }
   createSkillRequest(actor: string, raw: unknown) {
     const input = skillRequestInput.parse(raw);

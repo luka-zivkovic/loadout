@@ -27,6 +27,12 @@ type SkillRequest = {
   commentCount: number;
   interested: boolean;
   comments?: RequestComment[];
+  nextCommentCursor?: string | null;
+};
+type RequestPage = {
+  requests: SkillRequest[];
+  total: number;
+  nextCursor: string | null;
 };
 
 function Byline({
@@ -49,15 +55,64 @@ function Byline({
 export function Requests({ user }: { user: WebUser }) {
   const [selectedId, setSelectedId] = useParam("request");
   const [requests, setRequests] = useState<SkillRequest[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [detail, setDetail] = useState<SkillRequest | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
 
   async function reload() {
-    const result = await api<{ requests: SkillRequest[] }>("/skill-requests");
+    const result = await api<RequestPage>("/skill-requests");
     setRequests(result.requests);
+    setTotal(result.total);
+    setNextCursor(result.nextCursor);
     setError("");
+  }
+  async function loadMoreRequests() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const result = await api<RequestPage>(`/skill-requests?cursor=${encodeURIComponent(nextCursor)}`);
+      setRequests((current) => {
+        const seen = new Set(current?.map((request) => request.id));
+        return [...(current ?? []), ...result.requests.filter((request) => !seen.has(request.id))];
+      });
+      setTotal(result.total);
+      setNextCursor(result.nextCursor);
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+  async function loadOlderComments() {
+    if (!detail?.nextCommentCursor || loadingMore) return;
+    const requestId = detail.id;
+    const cursor = detail.nextCommentCursor;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const result = await api<{ request: SkillRequest }>(
+        `/skill-requests/${encodeURIComponent(requestId)}?cursor=${encodeURIComponent(cursor)}`,
+      );
+      setDetail((current) => {
+        if (!current || current.id !== requestId) return current;
+        const seen = new Set(current.comments?.map((comment) => comment.id));
+        return {
+          ...current,
+          commentCount: result.request.commentCount,
+          comments: [...(current.comments ?? []), ...(result.request.comments ?? []).filter((comment) => !seen.has(comment.id))],
+          nextCommentCursor: result.request.nextCommentCursor,
+        };
+      });
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
   }
   useEffect(() => {
     reload().catch((caught) => setError(caught.message));
@@ -108,7 +163,11 @@ export function Requests({ user }: { user: WebUser }) {
     setError("");
     try {
       const result = await api<{ request: SkillRequest }>(path, body);
-      setDetail(result.request);
+      setDetail((current) =>
+        path.endsWith("/interest") && current?.id === result.request.id
+          ? { ...result.request, comments: current.comments, nextCommentCursor: current.nextCommentCursor }
+          : result.request,
+      );
       await reload();
       return true;
     } catch (caught) {
@@ -152,10 +211,11 @@ export function Requests({ user }: { user: WebUser }) {
     setError("");
     try {
       await api(`/skill-requests/${detail.id}/comments/${commentId}/hide`, {});
-      const result = await api<{ request: SkillRequest }>(
-        `/skill-requests/${detail.id}`,
-      );
-      setDetail(result.request);
+      setDetail((current) => current?.id === detail.id ? {
+        ...current,
+        comments: current.comments?.filter((comment) => comment.id !== commentId),
+        commentCount: Math.max(0, current.commentCount - 1),
+      } : current);
       await reload();
     } catch (caught) {
       setError((caught as Error).message);
@@ -215,7 +275,7 @@ export function Requests({ user }: { user: WebUser }) {
                   <h2 id="request-discussion-title">
                     Discussion <span className="badge">{detail.commentCount}</span>
                   </h2>
-                  <p>Help shape the idea before someone builds it.</p>
+                  <p>Newest first. Help shape the idea before someone builds it.</p>
                 </div>
               </div>
               {detail.comments?.length ? (
@@ -241,6 +301,13 @@ export function Requests({ user }: { user: WebUser }) {
                 </ul>
               ) : (
                 <p className="request-no-comments">No discussion yet. Add the first thought.</p>
+              )}
+              {detail.nextCommentCursor && (
+                <div className="request-page-actions">
+                  <button className="button secondary" disabled={loadingMore} onClick={loadOlderComments}>
+                    {loadingMore ? "Loading…" : "Load older comments"}
+                  </button>
+                </div>
               )}
               {!detail.archivedAt && (
                 <form className="request-comment-form" onSubmit={comment}>
@@ -318,7 +385,7 @@ export function Requests({ user }: { user: WebUser }) {
             <section className="panel" aria-label="Open skill requests">
               <div className="panel-heading">
                 <div>
-                  <h2>Open requests <span className="badge">{requests.length}</span></h2>
+                  <h2>Open requests <span className="badge">{total}</span></h2>
                   <p>Most recent first</p>
                 </div>
               </div>
@@ -340,6 +407,14 @@ export function Requests({ user }: { user: WebUser }) {
                   </li>
                 ))}
               </ul>
+              {nextCursor && (
+                <div className="request-page-actions">
+                  <span>{requests.length} of {total} shown</span>
+                  <button className="button secondary" disabled={loadingMore} onClick={loadMoreRequests}>
+                    {loadingMore ? "Loading…" : "Load more requests"}
+                  </button>
+                </div>
+              )}
             </section>
           ) : (
             <section className="panel">

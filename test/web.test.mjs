@@ -309,6 +309,10 @@ test("skill requests support anonymous discussion, interest, and moderation", as
     assert.equal(vote.value.request.interestCount, 1);
     assert.equal(vote.value.request.interested, true);
   }
+  const unvote = await f.call(`${path}/${id}/interest`, { interested: false }, colleague);
+  assert.equal(unvote.status, 200);
+  assert.equal(unvote.value.request.interestCount, 0);
+  assert.equal(unvote.value.request.interested, false);
   const comment = await f.call(
     `${path}/${id}/comments`,
     { body: "We also need to check backward compatibility.", anonymous: true },
@@ -344,6 +348,58 @@ test("skill requests support anonymous discussion, interest, and moderation", as
     (await f.call(`${path}/${id}/comments`, { body: "Later", anonymous: false }, colleague)).status,
     409,
   );
+});
+
+test("skill request and discussion pages stay bounded and complete", async (t) => {
+  const f = await fixture(t);
+  const admin = await f.firstAdmin();
+  const member = await f.member(admin, "requester");
+  const path = "/api/skill-requests";
+  const created = [];
+  for (let i = 0; i < 25; i++) {
+    const result = f.registry.ops.createSkillRequest(member.user.actorId, {
+      title: `Skill idea number ${i}`,
+      body: `A reusable workflow for scenario ${i}.`,
+      anonymous: false,
+    });
+    created.push(result.id);
+  }
+  const first = await f.call(path, undefined, member);
+  assert.equal(first.status, 200);
+  assert.equal(first.value.total, 25);
+  assert.equal(first.value.requests.length, 20);
+  assert(first.value.nextCursor);
+  const second = await f.call(`${path}?cursor=${encodeURIComponent(first.value.nextCursor)}`, undefined, member);
+  assert.equal(second.status, 200);
+  assert.equal(second.value.requests.length, 5);
+  assert.equal(second.value.nextCursor, null);
+  assert.equal(new Set([...first.value.requests, ...second.value.requests].map((request) => request.id)).size, 25);
+  assert.equal((await f.call(`${path}?cursor=invalid`, undefined, member)).status, 400);
+
+  const requestId = created[0];
+  for (let i = 0; i < 35; i++)
+    f.registry.ops.commentOnSkillRequest(member.user.actorId, requestId, {
+      body: `Comment number ${i}`,
+      anonymous: false,
+    });
+  const detail = await f.call(`${path}/${requestId}`, undefined, member);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.value.request.commentCount, 35);
+  assert.equal(detail.value.request.comments.length, 30);
+  assert(detail.value.request.nextCommentCursor);
+  const older = await f.call(
+    `${path}/${requestId}?cursor=${encodeURIComponent(detail.value.request.nextCommentCursor)}`,
+    undefined,
+    member,
+  );
+  assert.equal(older.status, 200);
+  assert.equal(older.value.request.comments.length, 5);
+  assert.equal(older.value.request.nextCommentCursor, null);
+  assert.equal(
+    new Set([...detail.value.request.comments, ...older.value.request.comments].map((comment) => comment.id)).size,
+    35,
+  );
+  assert.equal((await f.call(`${path}/${requestId}?cursor=invalid`, undefined, member)).status, 400);
 });
 
 test("first admin requires a host-issued key, normalizes identity, and can be claimed only once", async (t) => {

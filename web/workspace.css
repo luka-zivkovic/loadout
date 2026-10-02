@@ -1424,6 +1424,7 @@ pre:focus-visible {
 .request-comment-head { justify-content: space-between; }
 .request-comments p { margin-top: 8px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
 .request-no-comments { padding: 22px; color: var(--text-muted); font-size: 13px; }
+.request-page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 22px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
 .request-comment-form { border-top: 1px solid var(--border); }
 
 @media (max-width: 760px) {

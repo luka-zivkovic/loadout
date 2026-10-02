@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Registry, createRegistryRequestHandler } from "../src/registry.js";
 import { WebAuth } from "../src/web-auth.js";
 import { TeamError } from "../src/team-protocol.js";
+import { boundedBody } from "../src/request-body.js";
 import { durableDatabase } from "./sqlite.js";
 
 interface Env {
@@ -38,27 +39,6 @@ function error(status: number, code: string, message: string) {
 }
 
 type RegistryHandler = ReturnType<typeof createRegistryRequestHandler>;
-
-async function boundedBody(request: Request, maxBytes: number): Promise<Buffer | undefined> {
-  if (!request.body) return undefined;
-  const reader = request.body.getReader();
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  let tooLarge = Number(request.headers.get("Content-Length") ?? 0) > maxBytes;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > maxBytes) tooLarge = true;
-      if (!tooLarge) chunks.push(Buffer.from(value));
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  if (tooLarge) throw new TeamError(413, "too_large", "Request exceeds the upload limit.");
-  return Buffer.concat(chunks, bytes);
-}
 
 async function handleRequest(handler: RegistryHandler, request: Request): Promise<Response> {
   const url = new URL(request.url);
