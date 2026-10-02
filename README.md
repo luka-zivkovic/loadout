@@ -12,7 +12,7 @@
   <a href="#what-gets-shared">What gets shared</a>
 </p>
 
-Loadout is a self-hosted workspace for sharing Pi, Claude Code, and Codex configurations, reusable skills, and usage measurements across a team. Standalone skills can also be installed for Cursor and OpenCode.
+Loadout is a self-hosted workspace for sharing Pi, Claude Code, Codex, Cursor, and OpenCode setups and reusable skills. Usage measurements currently cover Pi, Claude Code, and Codex.
 
 Want to try your colleague's code review setup on your own code? Inspect the files, pull a specific revision, and run it locally. You can also borrow a single skill without adopting their whole setup.
 
@@ -60,8 +60,8 @@ Loadout preserves each harness's configuration format. It doesn't translate an e
 | Pi          | Versioned profiles, skills, prompts, and extensions | Opt-in Pi extension and controlled review runs |
 | Claude Code | Native configuration snapshots and skills           | Local telemetry adapter                        |
 | Codex       | Native configuration snapshots and skills           | Local telemetry adapter                        |
-| Cursor      | Standalone Agent Skills                              | Not yet collected                              |
-| OpenCode    | Standalone Agent Skills                              | Not yet collected                              |
+| Cursor      | Project rules, commands, agents, hooks, and skills   | Not yet collected                              |
+| OpenCode    | Project configuration, agents, commands, plugins, and skills | Not yet collected                       |
 
 For a controlled code review comparison, the Pi runner gives each setup a fresh copy of the same frozen Git change and supplied context. Code and generated reviews stay on the machine running it. See the [Pi workflow guide](docs/PI-WORKFLOWS.md).
 

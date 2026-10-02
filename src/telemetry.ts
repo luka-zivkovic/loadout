@@ -77,6 +77,8 @@ export class NativeTelemetry {
     this.identity = store.identity();
     if (setup.scope !== store.scope)
       throw new Error("Setup and telemetry scopes must match");
+    if (setup.harness.kind !== "claude-code" && setup.harness.kind !== "codex")
+      throw new Error("Usage collection supports Claude Code and Codex setups only");
   }
   consume(raw: unknown): number {
     if (
@@ -106,8 +108,11 @@ export class NativeTelemetry {
     return accepted;
   }
   private observe(a: Attributes, nanos?: string) {
+    const harness = this.setup.harness.kind;
+    if (harness !== "claude-code" && harness !== "codex")
+      throw new Error("Usage collection supports Claude Code and Codex setups only");
     const prefix =
-      this.setup.harness.kind === "codex" ? "codex." : "claude_code.";
+      harness === "codex" ? "codex." : "claude_code.";
     const rawName = String(a["event.name"] ?? a.name ?? a.event ?? "");
     const event = rawName.startsWith(prefix)
       ? rawName.slice(prefix.length)
@@ -188,7 +193,7 @@ export class NativeTelemetry {
           source: "telemetry",
           toolPolicy: "profile",
           harness: {
-            kind: this.setup.harness.kind,
+            kind: harness,
             version: modelName(version).slice(0, 80),
           },
           coverage: emptyCoverage(),
@@ -427,7 +432,7 @@ export async function serveTelemetry(
   };
 }
 export function telemetryInstructions(
-  harness: NativeSetup["harness"]["kind"],
+  harness: "claude-code" | "codex",
   endpoint: string,
   token: string,
 ) {

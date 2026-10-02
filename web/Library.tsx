@@ -104,7 +104,7 @@ function setupFileCategories(profile: SetupPreview): FileCategory[] {
       {
         key: "hooks",
         label: "Hooks",
-        description: "Lifecycle commands the native harness may execute.",
+        description: "Executable hooks, plugins, or tools the native harness may load.",
         paths: profile.resources.hooks,
       },
       {
@@ -206,6 +206,13 @@ function Publish({
                 label="Setup harness"
               />
             </Field>
+            {(harness === "cursor" || harness === "opencode") && (
+              <p className="muted">
+                Choose a project folder during capture to include its native
+                rules, agents, commands, and skills. Teammates receive a bundle
+                to review and copy into their own project.
+              </p>
+            )}
             <Field label="Setup name">
               <input
                 value={name}
@@ -518,12 +525,15 @@ function SetupDetail({
     };
   }, [refKey(listing), attempt]);
   const harness = listing.harness?.kind ?? "pi";
+  const projectBundle = harness === "cursor" || harness === "opencode";
   const alias = `setup-${short(listing.revision)}`;
   const pullCommand = `loadout team pull ${data.team.teamName} ${listing.owner}/${listing.name} --scope ${data.team.scope} --revision ${listing.revision} --as ${alias}`;
   const inspectCommand = `loadout setup inspect ${alias} --scope ${data.team.scope}`;
   const activationCommand =
     harness === "pi"
       ? `PACKET="/path/to/frozen-review"\nloadout run ${alias} --scope ${data.team.scope} --packet "$PACKET"`
+      : projectBundle
+        ? `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n# Review the project files in "$SETUP_DIR", then copy the selected files into your project.`
       : `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n${harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}="$SETUP_DIR" ${harness === "codex" ? "codex" : "claude"}`;
   const commands = `${pullCommand}\n${inspectCommand}\n${activationCommand}`;
   const requirements = profile
@@ -661,6 +671,13 @@ function SetupDetail({
                     loads the resources shown below, and applies the workflow to
                     the frozen packet you choose.
                   </>
+                ) : projectBundle ? (
+                  <>
+                    Materializing writes a new project-shaped bundle and refuses
+                    to overwrite an existing directory. Review its files, then
+                    copy the parts you want into your project. Nothing is
+                    activated automatically.
+                  </>
                 ) : (
                   <>
                     Materializing writes a new configuration directory and
@@ -704,11 +721,15 @@ function SetupDetail({
                   <strong>
                     {harness === "pi"
                       ? "Run with your frozen packet"
+                      : projectBundle
+                        ? `Review the ${harnessLabels[harness]} project bundle`
                       : `Create and launch an isolated ${harnessLabels[harness]} config`}
                   </strong>
                   <p>
                     {harness === "pi"
                       ? "Set PACKET to the local frozen review packet this workflow should inspect."
+                      : projectBundle
+                        ? "SETUP_DIR is a new folder under your home directory. Review the generated project files before copying any into your own project."
                       : `SETUP_DIR is a suggested destination under your home directory. Change it if you prefer; it must not already exist. The final command selects this setup for one ${harnessLabels[harness]} process.`}
                   </p>
                   <pre>{activationCommand}</pre>
@@ -723,7 +744,7 @@ function SetupDetail({
               </small>
             </div>
           </section>}
-          {!legacyBlocked && <button
+          {!legacyBlocked && !projectBundle && <button
             className="button primary spaced"
             onClick={() =>
               go(

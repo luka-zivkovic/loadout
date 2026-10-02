@@ -62,7 +62,7 @@ const help = `Loadout — shared skills, native harness setups, and metadata-onl
   skill list | show NAME | export NAME --out FILE | import FILE
   skill install NAME --harness pi|claude-code|codex|cursor|opencode [--project DIR | --out DIR]
   skill extract SETUP SKILL_NAME [--compatible pi,claude-code,codex,cursor,opencode]
-  setup capture NAME --harness pi|claude-code|codex [--agent-dir DIR] [--project DIR]
+  setup capture NAME --harness pi|claude-code|codex|cursor|opencode [--agent-dir DIR] [--project DIR]
   setup list | show NAME
   setup add-skill NAME SKILL [--as LOCAL_NAME]
   setup materialize NAME --out NEW_CONFIG_DIR
@@ -789,7 +789,7 @@ async function main() {
       assertLocalAvailable(store, setup);
       const result = materializeSetup(setup, need(v.out, "--out"));
       console.log(JSON.stringify(result, null, 2));
-      if (result.harness !== "pi")
+      if (result.harness === "claude-code" || result.harness === "codex")
         console.log(
           `\nLaunch from your project with:\n${result.harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}='${result.directory.replace(/'/g, "'\\''")}' ${result.harness === "codex" ? "codex" : "claude"}`,
         );
@@ -807,6 +807,8 @@ async function main() {
       throw new Error(
         "Use Pi's /share-start and /share-stop extension for Pi analytics",
       );
+    if (setup.harness.kind === "cursor" || setup.harness.kind === "opencode")
+      throw new Error("Usage collection is not supported for Cursor or OpenCode setups");
     const { NativeTelemetry, serveTelemetry, telemetryInstructions } =
       await import("./telemetry.js");
     const collector = new NativeTelemetry(

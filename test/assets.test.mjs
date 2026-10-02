@@ -89,7 +89,69 @@ test('native capture excludes credentials, telemetry, memory, task context, and 
   put(join(claude, '.mcp.json'), '{"mcpServers":{"docs":{"type":"http","url":"https://example.invalid/mcp","headers":{"Authorization":"PRIVATE_TOKEN"}}}}');
   const c = captureSetup({ name: 'claude-safe', scope: 'work', harness: 'claude-code', agentDir: claude, version: '1.2.3' }); assert(!JSON.stringify(c).includes('PRIVATE_')); assert(!JSON.stringify(c).includes('example.invalid')); assert.deepEqual(c.mcpServerNames, ['docs']); assert(!('mcpServers' in c));
   const out = join(dir, 'claude-export'); materializeSetup(c, out); assert(!existsSync(join(out, 'mcp.json')));
-  assert.throws(() => captureSetup({ name: 'bad', scope: 'work', harness: 'cursor', agentDir: root }), /Invalid option|Invalid value/);
+});
+
+test('Cursor setup capture shares project resources and MCP names without account data', t => {
+  const dir = temp(t); const root = join(dir, 'cursor'); const project = join(dir, 'project');
+  put(join(root, 'cli-config.json'), JSON.stringify({ version: 1, permissions: { allow: ['Read(*)'] }, auth: { token: 'PRIVATE_CURSOR_TOKEN' } }));
+  put(join(root, 'mcp.json'), JSON.stringify({ mcpServers: { 'docs service': { url: 'https://private.example.invalid', headers: { Authorization: 'PRIVATE_HEADER' } } } }));
+  put(join(project, '.cursor/cli.json'), JSON.stringify({ permissions: { deny: ['Shell(rm)'] } }));
+  put(join(project, '.cursor/rules/review.mdc'), '---\nalwaysApply: true\n---\nReview carefully.');
+  put(join(project, '.cursor/commands/review.md'), 'Review the current diff.');
+  put(join(project, '.cursor/agents/verifier.md'), '---\nname: verifier\ndescription: Verify results\n---\nCheck evidence.');
+  put(join(project, '.cursor/hooks.json'), JSON.stringify({ version: 1, hooks: { afterFileEdit: [{ command: '.cursor/hooks/format.sh' }] } }));
+  put(join(project, '.cursor/hooks/format.sh'), '#!/bin/sh\nexit 0\n');
+  put(join(project, '.agents/skills/precise-review/SKILL.md'), '---\nname: precise-review\ndescription: Check changes.\n---\nReview the diff.');
+  put(join(project, 'AGENTS.md'), 'PRIVATE_PROJECT_INSTRUCTIONS');
+  put(join(project, 'source.ts'), 'PRIVATE_SOURCE_CODE');
+  const setup = captureSetup({ name: 'cursor-review', scope: 'work', harness: 'cursor', agentDir: root, project, version: '1.2.3' });
+  assert.deepEqual(setup.mcpServerNames, ['docs service']);
+  assert.deepEqual(setup.settings, { permissions: { deny: ['Shell(rm)'] } });
+  assert(setup.instructions.some(path => path.endsWith('review.mdc')));
+  assert.equal(setup.skillPins[0].name, 'precise-review');
+  assert(!JSON.stringify(setup).includes('PRIVATE_'));
+  assert(!JSON.stringify(setup).includes('private.example.invalid'));
+  const out = join(dir, 'cursor-bundle'); const result = materializeSetup(setup, out);
+  assert.equal(result.harness, 'cursor');
+  assert.equal(readFileSync(join(out, '.cursor/rules/review.mdc'), 'utf8').includes('Review carefully'), true);
+  assert(existsSync(join(out, '.cursor/commands/review.md')));
+  assert(existsSync(join(out, '.cursor/agents/verifier.md')));
+  assert(existsSync(join(out, '.cursor/hooks.json')));
+  assert(existsSync(join(out, '.agents/skills/precise-review/SKILL.md')));
+  assert(!existsSync(join(out, '.cursor/mcp.json')));
+  assert.deepEqual(JSON.parse(readFileSync(join(out, '.cursor/cli.json'), 'utf8')), setup.settings);
+  put(join(project, '.cursor/hooks/secret.sh'), 'export API_KEY="private-long-secret-value"');
+  assert.throws(() => captureSetup({ name: 'unsafe', scope: 'work', harness: 'cursor', agentDir: root, project, version: '1.2.3' }), /credential/i);
+});
+
+test('OpenCode setup capture accepts JSONC, omits provider details, and exports a project bundle', async t => {
+  const dir = temp(t); const root = join(dir, 'opencode'); const project = join(dir, 'project');
+  put(join(root, 'opencode.jsonc'), '{ // global preferences\n "model": "openai/base", "mcp": {"docs":{"url":"https://private.example.invalid"}}, "provider": {"openai":{"options":{"apiKey":"PRIVATE_KEY"}}}, }');
+  put(join(project, 'opencode.jsonc'), '{"model":"openai/project", "agent":{"review":{"prompt":"Review carefully"}},}');
+  put(join(project, '.opencode/agents/reviewer.md'), '---\ndescription: Check changes\n---\nReview code.');
+  put(join(project, '.opencode/commands/review.md'), 'Review $ARGUMENTS.');
+  put(join(project, '.opencode/plugins/check.ts'), 'export const check = () => true;');
+  put(join(project, '.opencode/skills/precise-review/SKILL.md'), '---\nname: precise-review\ndescription: Check changes.\n---\nReview the diff.');
+  const setup = captureSetup({ name: 'opencode-review', scope: 'work', harness: 'opencode', agentDir: root, project, version: '1.2.3' });
+  assert.equal(setup.settings.model, 'openai/project');
+  assert.deepEqual(setup.mcpServerNames, ['docs']);
+  assert(setup.omittedSettings.includes('provider'));
+  assert.equal(setup.skillPins[0].name, 'precise-review');
+  assert(!JSON.stringify(setup).includes('PRIVATE_'));
+  assert(!JSON.stringify(setup).includes('private.example.invalid'));
+  const out = join(dir, 'opencode-bundle'); const result = materializeSetup(setup, out);
+  assert.equal(result.harness, 'opencode');
+  assert.equal(JSON.parse(readFileSync(join(out, 'opencode.json'), 'utf8')).model, 'openai/project');
+  assert(existsSync(join(out, '.opencode/agents/reviewer.md')));
+  assert(existsSync(join(out, '.opencode/commands/review.md')));
+  assert(existsSync(join(out, '.opencode/plugins/check.ts')));
+  assert(existsSync(join(out, '.agents/skills/precise-review/SKILL.md')));
+  assert(!existsSync(join(out, '.opencode/mcp.json')));
+  const f = await registryFixture(t, dir); const alice = await f.client('alice', 'alice'); const bob = await f.client('bob', 'bob');
+  await alice.client.publish(setup);
+  const pulled = await bob.client.pull('alice/opencode-review');
+  assert.equal(pulled.profile.harness.kind, 'opencode');
+  assert.equal(pulled.profile.revision, setup.revision);
 });
 
 test('registry rejects legacy MCP definitions while retaining historical revision validation', t => {
@@ -221,7 +283,7 @@ test('CLI captures, pins, extracts, materializes, and installs a skill without c
   assert.throws(() => cli('run', 'review', '--packet', dir));
 });
 
-test('CLI installs declared Cursor and OpenCode skills through the shared Agent Skills path', t => {
+test('CLI installs Cursor and OpenCode skills and captures them in project setups', t => {
   const dir = temp(t); makeSkill(join(dir, 'skill'));
   const cli = (...args) => execFileSync(process.execPath, ['dist/cli.js', ...args, '--home', join(dir, 'store'), '--scope', 'work'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const captured = JSON.parse(cli('skill', 'capture', join(dir, 'skill'), '--compatible', 'cursor,opencode'));
@@ -230,6 +292,10 @@ test('CLI installs declared Cursor and OpenCode skills through the shared Agent 
     const project = join(dir, harness);
     cli('skill', 'install', 'precise-review', '--harness', harness, '--project', project);
     assert(existsSync(join(project, '.agents/skills/precise-review/SKILL.md')));
+    const setup = JSON.parse(cli('setup', 'capture', `${harness}-project`, '--harness', harness, '--agent-dir', dir, '--project', project, '--harness-version', '1.2.3'));
+    assert.equal(setup.harness.kind, harness);
+    assert.equal(setup.skillPins[0].name, 'precise-review');
+    cli('setup', 'materialize', `${harness}-project`, '--out', join(dir, `${harness}-bundle`));
+    assert(existsSync(join(dir, `${harness}-bundle/.agents/skills/precise-review/SKILL.md`)));
   }
-  assert.throws(() => cli('setup', 'capture', 'wrong', '--harness', 'cursor', '--agent-dir', dir));
 });
