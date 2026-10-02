@@ -1,6 +1,6 @@
 # Shared skills and native harnesses
 
-Loadout supports a standalone skill library for Pi, Claude Code, Codex, Cursor, and OpenCode. Native setup snapshots and usage collection currently cover Pi, Claude Code, and Codex. A setup keeps its own configuration format; no full setup translation is attempted. Existing Pi profiles, registry contents, and analytics exports remain readable.
+Loadout supports a standalone skill library and native setup snapshots for Pi, Claude Code, Codex, Cursor, and OpenCode. Usage collection currently covers Pi, Claude Code, and Codex. A setup keeps its own configuration format; no full setup translation is attempted. Existing Pi profiles, registry contents, and analytics exports remain readable.
 
 The dashboard has **Shared skills**, a harness filter in **Shared setups**, and a harness filter for activity. Skill details include compatibility, requirements, exact revision, installation commands, setups pinning that revision, and measurements referencing it. The same skill can be pinned into multiple native setups.
 
@@ -55,13 +55,15 @@ The extracted skill retains its declared compatibility. Use `--compatible` only 
 loadout setup capture my-claude --harness claude-code --scope work
 loadout setup capture my-codex --harness codex --scope work
 loadout setup capture my-pi --harness pi --scope work
+loadout setup capture my-cursor --harness cursor --scope work --project /path/to/project
+loadout setup capture my-opencode --harness opencode --scope work --project /path/to/project
 loadout setup list --scope work
 loadout team publish engineering my-claude --scope work
 ```
 
 `--agent-dir` selects another configuration directory. `--project` includes supported project configuration/resources; repository instruction files stay with the task. `--workflow` and `--prompt FILE` declare the reusable workflow. Native versions are detected from the installed CLI; a missing executable records `unknown`. `--harness-version` is available for offline/test capture.
 
-Native capture deliberately selects supported model/reasoning settings, permission settings, hooks, reusable global instructions, skill directories, and other reusable resources. Claude captures enabled plugin declarations. Claude and Codex record MCP server names only; commands, arguments, URLs, and credentials are not included. Authentication files, telemetry destinations, session history, automatic memories, arbitrary environment values, and project account/trust state are excluded. Omitted setting names appear in the setup inspector.
+Native capture deliberately selects supported model/reasoning settings, permission settings, hooks, reusable global instructions, skill directories, and other reusable resources. Claude captures enabled plugin declarations. Cursor captures project rules, commands, agents, hooks, and skills, plus portable CLI permissions. OpenCode captures JSON/JSONC model and agent settings, commands, agents, plugins, tools, and skills. All four native harnesses record MCP server names only; commands, arguments, URLs, and credentials are not included. Authentication files, telemetry destinations, session history, automatic memories, arbitrary environment values, and project account/trust state are excluded. Omitted setting names appear in the setup inspector.
 
 Plugin declarations and named MCP servers are requirements, not bundled installations. Configure MCP servers independently on each receiving device. Hook scripts are bundled when they live under the captured hooks directory, but machine-specific command paths may need adjustment. Dependencies outside captured directories and installed plugin caches are not copied. Managed policies remain authoritative.
 
@@ -75,6 +77,8 @@ loadout setup materialize colleague-claude --scope work --out /path/to/new-confi
 ```
 
 Materialize creates a new native configuration directory and prints a launch command using `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Launch from your chosen local project, authenticate locally if needed, and resolve the listed dependencies. It does not export MCP definitions or an `mcp.json`; configure the named servers locally if the workflow needs them. Your default harness configuration is not overwritten. Local project configuration and ambient resources may still affect behavior, so these launches are not controlled experiments.
+
+For Cursor and OpenCode, `setup materialize` creates a new project-shaped bundle containing `.cursor/` or `.opencode/` and, for pinned skills, `.agents/skills/`. OpenCode's selected settings are written to `opencode.json`. Review those files before copying selected parts into your project; Loadout never overwrites your project. Cursor account-synced user and team rules cannot be read from local setup files, so they are not included. Cursor and OpenCode usage collection is not available yet.
 
 Setup snapshots and skills are **explicitly captured and published**. Pulling pins the selected revision. `team sync --watch` exchanges saved measurements and catalogue metadata; it neither publishes configuration changes nor installs newer versions automatically. Optional `--check` detects drift against saved capture sources without updating the saved/published setup; see [TEAM.md](TEAM.md). Optimistic concurrency checks reject publishing over a revision changed on another device.
 

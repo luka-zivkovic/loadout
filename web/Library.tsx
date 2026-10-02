@@ -104,7 +104,7 @@ function setupFileCategories(profile: SetupPreview): FileCategory[] {
       {
         key: "hooks",
         label: "Hooks",
-        description: "Lifecycle commands the native harness may execute.",
+        description: "Executable hooks, plugins, or tools the native harness may load.",
         paths: profile.resources.hooks,
       },
       {
@@ -182,7 +182,20 @@ function Publish({
   const [harness, setHarness] = useState("pi");
   const [name, setName] = useState("my-review-setup");
   const validName = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(name);
-  const instructions = `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.\n\n${kind === "skill" ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME." : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it. Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}`}\n\nShow me the exact included files and their contents, executable resources, native settings, omitted settings, and local requirements. Explain that these files become visible to workspace members. Do not include task code, notes, session traces, or credentials. Scope separates storage; it does not redact file contents.\n\nAfter I choose to publish this reviewed snapshot, use loadout team ${kind === "skill" ? "publish-skill" : "publish"} ${team.teamName} ${kind === "skill" ? "SKILL_NAME" : name} --scope ${team.scope} --reviewed-revision followed by the full revision from capture. If the snapshot changed, inspect the new revision first. Report the published revision and its library link.\n\nSubsequent edits remain local until captured, reviewed, and published again. loadout setup check reports changes without publishing them. Do not start usage collection or continuous sync as part of sharing this snapshot.`;
+  const targetOrigin = location.origin;
+  const targetSetups = `${targetOrigin}/setups`;
+  const targetCheck = `Target Loadout instance: ${targetSetups}\nTarget team ID: ${team.teamId}\n\nUse my existing local remote alias as REMOTE. Run loadout team status REMOTE --scope ${team.scope}, then confirm its url is ${targetOrigin} and its teamId is ${team.teamId}. If no matching alias exists, ask me to choose an unused alias and run loadout team login REMOTE --scope ${team.scope} --url ${targetOrigin}. Wait for me to approve the device code, then check status again. Never publish through an alias pointing elsewhere.`;
+  const captureInstructions = kind === "skill"
+    ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME."
+    : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it. Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}\nCapture and inspection save locally; the publish step below shares the reviewed revision with this workspace.`;
+  const instructions = [
+    `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.`,
+    ...(kind === "setup" ? [targetCheck] : []),
+    captureInstructions,
+    "Show me the exact included files and their contents, executable resources, native settings, omitted settings, and local requirements. Explain that these files become visible to workspace members. Do not include task code, notes, session traces, or credentials. Scope separates storage; it does not redact file contents.",
+    `After I choose to publish this reviewed snapshot, use loadout team ${kind === "skill" ? "publish-skill" : "publish"} ${kind === "setup" ? "REMOTE" : team.teamName} ${kind === "skill" ? "SKILL_NAME" : name} --scope ${team.scope} --reviewed-revision followed by the full revision from capture. If the snapshot changed, inspect the new revision first. Report the published revision and its library link${kind === "setup" ? ` under ${targetSetups}` : ""}.`,
+    "Subsequent edits remain local until captured, reviewed, and published again. loadout setup check reports changes without publishing them. Do not start usage collection or continuous sync as part of sharing this snapshot.",
+  ].join("\n\n");
   return (
     <Modal
       title={kind === "skill" ? "Share a skill" : "Share a native setup"}
@@ -206,6 +219,13 @@ function Publish({
                 label="Setup harness"
               />
             </Field>
+            {(harness === "cursor" || harness === "opencode") && (
+              <p className="muted">
+                Choose a project folder during capture to include its native
+                rules, agents, commands, and skills. Teammates receive a bundle
+                to review and copy into their own project.
+              </p>
+            )}
             <Field label="Setup name">
               <input
                 value={name}
@@ -220,6 +240,11 @@ function Publish({
           <li>Inspect files, hooks, requirements, and omitted settings.</li>
           <li>Publish the reviewed revision to this workspace.</li>
         </ol>
+        {kind === "setup" && (
+          <p className="text-small muted spaced">
+            Target workspace: <a href={targetSetups}>{targetSetups}</a>
+          </p>
+        )}
         {validName ? (
           <>
             <Copy text={instructions} label="Copy publishing instructions" />
@@ -518,12 +543,15 @@ function SetupDetail({
     };
   }, [refKey(listing), attempt]);
   const harness = listing.harness?.kind ?? "pi";
+  const projectBundle = harness === "cursor" || harness === "opencode";
   const alias = `setup-${short(listing.revision)}`;
   const pullCommand = `loadout team pull ${data.team.teamName} ${listing.owner}/${listing.name} --scope ${data.team.scope} --revision ${listing.revision} --as ${alias}`;
   const inspectCommand = `loadout setup inspect ${alias} --scope ${data.team.scope}`;
   const activationCommand =
     harness === "pi"
       ? `PACKET="/path/to/frozen-review"\nloadout run ${alias} --scope ${data.team.scope} --packet "$PACKET"`
+      : projectBundle
+        ? `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n# Review the project files in "$SETUP_DIR", then copy the selected files into your project.`
       : `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n${harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}="$SETUP_DIR" ${harness === "codex" ? "codex" : "claude"}`;
   const commands = `${pullCommand}\n${inspectCommand}\n${activationCommand}`;
   const requirements = profile
@@ -661,6 +689,13 @@ function SetupDetail({
                     loads the resources shown below, and applies the workflow to
                     the frozen packet you choose.
                   </>
+                ) : projectBundle ? (
+                  <>
+                    Materializing writes a new project-shaped bundle and refuses
+                    to overwrite an existing directory. Review its files, then
+                    copy the parts you want into your project. Nothing is
+                    activated automatically.
+                  </>
                 ) : (
                   <>
                     Materializing writes a new configuration directory and
@@ -704,11 +739,15 @@ function SetupDetail({
                   <strong>
                     {harness === "pi"
                       ? "Run with your frozen packet"
+                      : projectBundle
+                        ? `Review the ${harnessLabels[harness]} project bundle`
                       : `Create and launch an isolated ${harnessLabels[harness]} config`}
                   </strong>
                   <p>
                     {harness === "pi"
                       ? "Set PACKET to the local frozen review packet this workflow should inspect."
+                      : projectBundle
+                        ? "SETUP_DIR is a new folder under your home directory. Review the generated project files before copying any into your own project."
                       : `SETUP_DIR is a suggested destination under your home directory. Change it if you prefer; it must not already exist. The final command selects this setup for one ${harnessLabels[harness]} process.`}
                   </p>
                   <pre>{activationCommand}</pre>
@@ -723,7 +762,7 @@ function SetupDetail({
               </small>
             </div>
           </section>}
-          {!legacyBlocked && <button
+          {!legacyBlocked && !projectBundle && <button
             className="button primary spaced"
             onClick={() =>
               go(

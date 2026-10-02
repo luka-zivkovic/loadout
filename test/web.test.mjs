@@ -1060,6 +1060,10 @@ test("dashboard serves private metadata, separates demo data, exposes scores, an
   const instructions = (await f.call("/api/instructions", undefined, member))
     .value.instructions;
   assert.match(instructions, /team login engineering --scope work/);
+  assert.match(instructions, /cursor, or opencode/);
+  assert.match(instructions, /Cursor and OpenCode selected settings/);
+  assert.match(instructions, /project or global rules and instructions, commands, agents, hooks, plugin and tool files, and skills/);
+  assert.match(instructions, /MCP servers are shared by name only/);
   assert.match(instructions, /Never ask for my password/);
   assert(!/ps[bidrs]?_[a-f0-9]{64}/.test(instructions));
   for (const route of [

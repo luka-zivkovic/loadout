@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { canonical } from "./files.js";
+import { supportsSetupComparison } from "./onboarding.js";
 import {
   hash,
   id,
@@ -462,6 +463,12 @@ export class Operations {
         400,
         "harness_mismatch",
         "Whole-setup trials require the same harness. Share individual skills across harnesses.",
+      );
+    if (!supportsSetupComparison(setupHarness(baseline)))
+      fail(
+        400,
+        "unsupported_harness",
+        "Comparisons currently support Pi, Claude Code, and Codex setups only.",
       );
     if (baseline.workflow.id !== candidate.workflow.id)
       fail(400, "workflow_mismatch", "Choose setups with the same workflow.");

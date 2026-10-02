@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const PI_VERSION = "0.85.1";
 export const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/);
+export const mcpServerName = z.string().min(1).max(120).regex(/^[^\x00-\x1f]+$/).refine(value => value.trim().length > 0);
 export const hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const scope = z.enum(["personal", "work"]);
 export const thinking = z.enum([
@@ -77,8 +78,9 @@ export const fileSchema = z
   .strict();
 export const harnessSchema = z.enum(["pi", "claude-code", "codex", "cursor", "opencode"]);
 export type Harness = z.infer<typeof harnessSchema>;
-export const setupHarnessSchema = z.enum(["pi", "claude-code", "codex"]);
+export const setupHarnessSchema = harnessSchema;
 export type SetupHarness = z.infer<typeof setupHarnessSchema>;
+export const observedHarnessSchema = z.enum(["pi", "claude-code", "codex"]);
 export const harnessLabels: Record<Harness, string> = {
   pi: "Pi",
   "claude-code": "Claude Code",
@@ -145,7 +147,7 @@ export const nativeSetupBodySchema = z
     scope,
     harness: z
       .object({
-        kind: z.enum(["claude-code", "codex"]),
+        kind: z.enum(["claude-code", "codex", "cursor", "opencode"]),
         version: z.string().min(1).max(80),
       })
       .strict(),
@@ -153,7 +155,7 @@ export const nativeSetupBodySchema = z
     // Kept only so existing immutable v2 revisions remain readable. New captures
     // and publications carry names in mcpServerNames, never definitions.
     mcpServers: z.record(z.string(), z.unknown()).optional(),
-    mcpServerNames: z.array(id).max(100).optional(),
+    mcpServerNames: z.array(mcpServerName).max(100).optional(),
     workflow: z.object({ id, prompt: z.string().min(1).max(100_000) }).strict(),
     resources: z
       .object({
@@ -199,7 +201,7 @@ export const metricsSchema = z
     toolPolicy: z.enum(["profile", "read-only"]),
     piVersion: z.literal(PI_VERSION).optional(),
     harness: z
-      .object({ kind: setupHarnessSchema, version: z.string().min(1).max(80) })
+      .object({ kind: observedHarnessSchema, version: z.string().min(1).max(80) })
       .strict()
       .optional(),
     coverage: z

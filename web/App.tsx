@@ -40,7 +40,7 @@ import { registerDashboardTools } from "./agent-tools";
 import { SharingLink } from "./Sharing";
 import { Setups, SetupPage, Skills } from "./Library";
 import loadoutMark from "./assets/loadout.svg";
-import { harnessLabels, setupHarnessSchema } from "../src/schema";
+import { harnessLabels, observedHarnessSchema } from "../src/schema";
 import { ActivityView, Comparisons, Devices, TeamAccess } from "./Views";
 import { People } from "./People";
 import { Requests } from "./Requests";
@@ -362,7 +362,7 @@ function Auth({
           <SharingLink />
         </div>
         <span className="auth-bottom">
-          Self-hosted · Invitation only · Pi, Claude Code & Codex
+          Self-hosted · Invitation only · Pi, Claude Code, Codex, Cursor & OpenCode
         </span>
       </main>
     </div>
@@ -668,10 +668,10 @@ export default function App() {
                     }}
                   >
                     <option value="">All harnesses</option>
-                    {harness && !setupHarnessSchema.options.includes(harness as (typeof setupHarnessSchema.options)[number]) && (
+                    {harness && !observedHarnessSchema.options.includes(harness as (typeof observedHarnessSchema.options)[number]) && (
                       <option value={harness}>Unavailable harness: {harness}</option>
                     )}
-                    {setupHarnessSchema.options.map((key) => (
+                    {observedHarnessSchema.options.map((key) => (
                       <option key={key} value={key}>
                         {harnessLabels[key]}
                       </option>

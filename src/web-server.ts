@@ -95,7 +95,7 @@ function cookie(value: string, secure: boolean, clear = false) {
   return `pi_share_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${clear ? 0 : 604800}${secure ? "; Secure" : ""}`;
 }
 export function registrationInstructions(registry: Registry, origin: string) {
-  return `Help me connect my local Pi, Claude Code, or Codex harness to Loadout (${registry.metadata.teamName}) and share one setup snapshot.
+  return `Help me connect my local Pi, Claude Code, Codex, Cursor, or OpenCode harness to Loadout (${registry.metadata.teamName}) and share one setup snapshot.
 
 1. Use the locally installed loadout CLI. If it is missing, ask me for the Loadout repository location and run the commands below with node /path/to/pi-share/dist/cli.js instead of loadout. Do not install a similarly named package from a public registry.
 2. Run:
@@ -103,7 +103,7 @@ export function registrationInstructions(registry: Registry, origin: string) {
 3. Show me the device code and browser approval link. Wait for me to sign in and approve the matching device code. Never ask for my password or approve the device for me.
 4. After approval, run:
    loadout team status ${registry.metadata.teamName} --scope ${registry.metadata.scope}
-5. Ask which harness setup I want to share and whether to include the current project. Capture it once with loadout setup capture NAME --harness HARNESS --scope ${registry.metadata.scope}, replacing HARNESS with pi, claude-code, or codex and adding --project DIR only if I choose that folder. Inspect it with loadout setup inspect NAME --scope ${registry.metadata.scope}.
+5. Ask which harness setup I want to share and whether to include the current project. Capture it once with loadout setup capture NAME --harness HARNESS --scope ${registry.metadata.scope}, replacing HARNESS with pi, claude-code, codex, cursor, or opencode and adding --project DIR only if I choose that folder. For Cursor or OpenCode, explain that project files are included only when I choose a project folder. Inspect it with loadout setup inspect NAME --scope ${registry.metadata.scope}.
 6. Show me the included files and contents, settings, omitted settings, executable resources, and requirements. Explain that publishing makes the snapshot visible to workspace members. Publish only after I approve this exact revision, using loadout team publish ${registry.metadata.teamName} NAME --scope ${registry.metadata.scope} --reviewed-revision FULL_REVISION.
 7. Report the published revision. Do not start usage collection or continuous sync; those are separate, optional actions. Future setup changes stay local until I choose to capture and publish again.
 

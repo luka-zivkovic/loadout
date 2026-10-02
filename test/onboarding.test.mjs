@@ -12,7 +12,11 @@ test('one-time setup sharing completes onboarding without activity collection', 
 
 test('comparable setups require distinct revisions with the same harness and workflow', () => {
   assert.equal(hasComparableSetups([pi('a'), pi('b')]), true);
+  assert.equal(hasComparableSetups([{ ...pi('a'), harness: { kind: 'claude-code' } }, { ...pi('b'), harness: { kind: 'claude-code' } }]), true);
   assert.equal(hasComparableSetups([pi('a'), { ...pi('b'), workflowId: 'docs' }]), false);
   assert.equal(hasComparableSetups([pi('a'), { ...pi('b'), harness: { kind: 'codex' } }]), false);
   assert.equal(hasComparableSetups([pi('a'), pi('a')]), false);
+  for (const harness of ['cursor', 'opencode']) {
+    assert.equal(hasComparableSetups([{ ...pi('a'), harness: { kind: harness } }, { ...pi('b'), harness: { kind: harness } }]), false);
+  }
 });
