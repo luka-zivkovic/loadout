@@ -138,7 +138,10 @@ export const nativeSetupBodySchema = z
       })
       .strict(),
     settings: z.record(z.string(), z.unknown()),
+    // Kept only so existing immutable v2 revisions remain readable. New captures
+    // and publications carry names in mcpServerNames, never definitions.
     mcpServers: z.record(z.string(), z.unknown()).optional(),
+    mcpServerNames: z.array(id).max(100).optional(),
     workflow: z.object({ id, prompt: z.string().min(1).max(100_000) }).strict(),
     resources: z
       .object({

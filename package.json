@@ -49,6 +49,6 @@
     "vite": "8.2.2"
   },
   "optionalDependencies": {
-    "@earendil-works/pi-coding-agent": "0.99.2"
+    "@earendil-works/pi-coding-agent": "file:vendor/pi-coding-agent-0.99.2-brace-fix.tgz"
   }
 }

@@ -12,6 +12,7 @@ import {
 import { artifactRef, trialInput } from "./operations.js";
 import { metricsSchema } from "./schema.js";
 import { TeamError } from "./team-protocol.js";
+import { hasMcpDetails } from "./setups.js";
 
 /** Called only after browser authentication and, for writes, CSRF/revocation checks. */
 export function workspaceApi(
@@ -115,10 +116,10 @@ export function workspaceApi(
       decodeURIComponent(file[3]!),
       file[4]!,
     ];
-    const artifact =
-      file[1] === "profile"
-        ? registry.profile(owner, name, revision)
-        : registry.skill(owner, name, revision);
+    const profile = file[1] === "profile" ? registry.profile(owner, name, revision) : null;
+    if (profile && hasMcpDetails(profile))
+      throw new TeamError(410, "legacy_mcp_details", "This historical setup contains MCP connection details. Recapture and publish a names-only revision.");
+    const artifact = profile ?? registry.skill(owner, name, revision);
     const packed = artifact.files.find(
       (f) => f.path === url.searchParams.get("path"),
     );

@@ -1090,7 +1090,7 @@ export function SetupDiff({
     "omittedSettings",
     "skillPins",
     "packages",
-    "mcpServers",
+    "mcpServerNames",
   ];
   const changedFiles = [
     ...new Set([...a.files, ...b.files].map((f: FileInfo) => f.path)),

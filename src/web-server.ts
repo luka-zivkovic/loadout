@@ -23,6 +23,7 @@ import type { Registry } from "./registry.js";
 import { sharingDisclosureText } from "./sharing.js";
 import { workspaceApi } from "./workspace-api.js";
 import { clientAddress } from "./proxy.js";
+import { hasMcpDetails, setupMcpServerNames } from "./setups.js";
 
 const shortToken = z.string().max(100);
 const userCode = z.string().regex(/^[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5}$/);
@@ -310,12 +311,13 @@ export function createWebHandler(
           decodeURIComponent(profilePath[2]!),
           profilePath[3]!,
         );
-        json(res, 200, {
-          profile: {
-            ...profile,
-            files: profile.files.map(({ data: _data, ...file }) => file),
-          },
-        });
+        const preview = profile.schemaVersion === 1 ? profile : {
+          ...profile,
+          settings: Object.fromEntries(Object.entries(profile.settings).filter(([key]) => key !== "mcp_servers")),
+          mcpServers: undefined,
+          mcpServerNames: setupMcpServerNames(profile),
+        };
+        json(res, 200, { profile: { ...preview, files: preview.files.map(({ data: _data, ...file }) => file) }, legacyMcpDetailsBlocked: hasMcpDetails(profile) });
         return true;
       }
       if (req.method === "POST" && path === "/api/assessments") {
