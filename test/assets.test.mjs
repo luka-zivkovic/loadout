@@ -194,6 +194,39 @@ test('nonstandard native skill metadata does not block setup capture or bypass f
   assert.throws(() => captureSetup({ name: 'bad', scope: 'work', harness: 'claude-code', agentDir: root }), /valid YAML/);
 });
 
+test('Claude capture includes linked shared skills without following unrelated symlinks', t => {
+  const dir = temp(t); const root = join(dir, '.claude'); const project = join(dir, 'project');
+  const shared = join(dir, '.agents/skills'); const projectShared = join(project, '.agents/skills');
+  put(join(root, 'settings.json'), '{}');
+  put(join(shared, 'find-skills/SKILL.md'), '---\nname: find-skills\ndescription: Find reusable skills.\n---\nSearch the skill library.\n');
+  put(join(shared, 'find-skills/references/guide.md'), 'Review the available skills.');
+  put(join(shared, 'native-writing/SKILL.md'), '---\nname: native-writing\ndescription: Write prose: improve its clarity.\n---\nWrite clearly.\n');
+  put(join(shared, 'unlinked/SKILL.md'), '---\nname: unlinked\ndescription: Do not share.\n---\nKeep this local.\n');
+  put(join(projectShared, 'tdd/SKILL.md'), '---\nname: tdd\ndescription: Test changes.\n---\nWrite a failing test first.\n');
+  mkdirSync(join(root, 'skills'), { recursive: true });
+  mkdirSync(join(project, '.claude/skills'), { recursive: true });
+  symlinkSync(join(shared, 'find-skills'), join(root, 'skills/find-skills'), 'dir');
+  symlinkSync(join(shared, 'native-writing'), join(root, 'skills/native-writing'), 'dir');
+  symlinkSync(join(projectShared, 'tdd'), join(project, '.claude/skills/tdd'), 'dir');
+  const options = { name: 'linked-skills', scope: 'work', harness: 'claude-code', agentDir: root, project, version: 'fixture' };
+  const setup = captureSetup(options);
+  assert.deepEqual(setup.skillPins.map(pin => pin.name).sort(), ['find-skills', 'tdd']);
+  assert(setup.files.some(file => file.path === 'shared-skills/find-skills/references/guide.md'));
+  assert(setup.files.some(file => file.path === 'global/skills/native-writing/SKILL.md'));
+  assert(setup.requirements.some(requirement => requirement.includes('native-writing') && requirement.includes('without a standalone pin')));
+  assert(!JSON.stringify(setup).includes('Keep this local.'));
+  const out = join(dir, 'materialized'); materializeSetup(setup, out);
+  assert.equal(readFileSync(join(out, 'skills/find-skills/SKILL.md'), 'utf8').includes('Search the skill library.'), true);
+  assert.equal(readFileSync(join(out, 'skills/tdd/SKILL.md'), 'utf8').includes('Write a failing test first.'), true);
+  assert.equal(readFileSync(join(out, 'skills/native-writing/SKILL.md'), 'utf8').includes('Write clearly.'), true);
+  put(join(dir, 'outside/SKILL.md'), '---\nname: outside\ndescription: Must not enter.\n---\nOutside.\n');
+  symlinkSync(join(dir, 'outside'), join(root, 'skills/outside'), 'dir');
+  assert.throws(() => captureSetup(options), /Only skill directory symlinks into/);
+  rmSync(join(root, 'skills/outside'));
+  symlinkSync(join(dir, 'outside/SKILL.md'), join(shared, 'find-skills/references/linked.md'));
+  assert.throws(() => captureSetup(options), /Symlinks are not portable/);
+});
+
 test('skill registry exchange preserves ownership, old revisions, conflicts, and a metadata-only catalogue', async t => {
   const dir = temp(t); const f = await registryFixture(t, dir); const a = await f.client('a', 'alice'); const a2 = await f.client('a2', 'alice'); const b = await f.client('b', 'bob');
   const skill = makeSkill(join(dir, 'skill')); await a.client.publishSkill(skill); await a2.client.pullSkill('alice/precise-review');
