@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
-import { canonical, digest, jsonRead, jsonWrite, packFile, rejectSecrets, safePath, unpack, validateFiles, walk } from "./files.js";
+import { canonical, digest, inside, jsonRead, jsonWrite, packFile, rejectSecrets, safePath, unpack, validateFiles, walk } from "./files.js";
 import { captureProfile, sealProfile, validateProfile } from "./profiles.js";
 import { id, mcpServerName, nativeSetupBodySchema, nativeSetupSchema, setupHarness, setupHarnessSchema, setupSchema, type SetupHarness, type NativeSetup, type Setup, type Skill } from "./schema.js";
 import { assertNoSymlinkAncestors, captureSkill, makeSkillPin, SkillMetadataError, validateSkillPins } from "./skills.js";
@@ -235,6 +235,36 @@ function captureProjectSetup(options: Parameters<typeof captureSetup>[0], harnes
   body.files.sort((a, b) => a.path.localeCompare(b.path));
   return sealNativeSetup(body);
 }
+function nativeSkillSources(dir: string, linkedRoot?: string): { dir: string; folder: string }[] {
+  const skip = new Set([".git", "node_modules", "memory", "sessions", ".DS_Store"]);
+  const linked: { dir: string; folder: string }[] = [];
+  let files: string[];
+  if (linkedRoot) {
+    if (lstatSync(dir).isSymbolicLink()) throw new Error(`Symlinks are not portable: ${dir}`);
+    const allowed = existsSync(linkedRoot) && !lstatSync(linkedRoot).isSymbolicLink()
+      ? realpathSync(linkedRoot)
+      : null;
+    files = readdirSync(dir).sort().flatMap(entry => {
+      if (skip.has(entry)) return [];
+      const path = join(dir, entry);
+      if (!lstatSync(path).isSymbolicLink()) return walk(path, skip);
+      let target: string;
+      try { target = realpathSync(path); }
+      catch { throw new Error(`Skill symlink target is unavailable: ${path}`); }
+      if (!allowed || !inside(allowed, target) || !lstatSync(target).isDirectory())
+        throw new Error(`Only skill directory symlinks into ${linkedRoot} can be captured: ${path}`);
+      if (!existsSync(join(target, "SKILL.md")))
+        throw new Error(`Linked skill directory has no SKILL.md: ${path}`);
+      linked.push({ dir: target, folder: entry });
+      return [];
+    });
+  } else files = walk(dir, skip);
+  return [
+    ...files.filter(file => basename(file) === "SKILL.md").map(file => ({ dir: dirname(file), folder: relative(dir, dirname(file)).split("\\").join("/") })),
+    ...linked,
+  ].sort((a, b) => a.folder.localeCompare(b.folder));
+}
+
 export function captureSetup(options: { name: string; scope: "work" | "personal"; harness: SetupHarness; agentDir?: string; project?: string; workflowId?: string; prompt?: string; model?: string; version?: string }): Setup {
   setupHarnessSchema.parse(options.harness);
   if (options.harness === "pi") return captureProfile({ ...options, agentDir: options.agentDir ?? nativeAgentDir("pi") });
@@ -273,15 +303,18 @@ export function captureSetup(options: { name: string; scope: "work" | "personal"
     }
     const dirs = [join(layer.root, "skills")];
     if (harness === "codex") dirs.push(join(layer.label === "global" ? (root === resolve(nativeAgentDir("codex")) ? homedir() : dirname(root)) : resolve(options.project!), ".agents/skills"));
-    for (const dir of new Set(dirs)) if (existsSync(dir)) for (const file of walk(dir, new Set([".git", "node_modules", "memory", "sessions", ".DS_Store"]))) if (basename(file) === "SKILL.md") {
-      const skillDir = dirname(file); const hasReceipt = existsSync(join(skillDir, ".pi-share-skill.json"));
+    const linkedRoot = harness === "claude-code"
+      ? join(layer.label === "global" ? (root === resolve(nativeAgentDir("claude-code")) ? homedir() : dirname(root)) : resolve(options.project!), ".agents/skills")
+      : undefined;
+    for (const dir of new Set(dirs)) if (existsSync(dir)) for (const source of nativeSkillSources(dir, linkedRoot)) {
+      const skillDir = source.dir; const hasReceipt = existsSync(join(skillDir, ".pi-share-skill.json"));
       try {
         const skill = captureSkill({ dir: skillDir, scope: options.scope, ...(hasReceipt ? {} : { compatibleWith: [harness] }) }); skills.set(skill.name, skill);
       } catch (error) {
         // Native harnesses may accept nonstandard frontmatter. Keep those files
         // native; malformed metadata must not imply cross-harness compatibility.
         if (!(error instanceof SkillMetadataError) || hasReceipt) throw error;
-        const folder = relative(dir, skillDir).split("\\").join("/");
+        const folder = source.folder;
         const dest = `${layer.label}/skills${folder ? `/${folder}` : ""}`;
         const files = walk(skillDir, new Set([".git", "node_modules", "memory", "sessions", ".DS_Store", ".pi-share-skill.json"]));
         body.resources.skills.push(dest);
