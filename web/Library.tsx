@@ -182,7 +182,20 @@ function Publish({
   const [harness, setHarness] = useState("pi");
   const [name, setName] = useState("my-review-setup");
   const validName = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(name);
-  const instructions = `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.\n\n${kind === "skill" ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME." : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it. Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}`}\n\nShow me the exact included files and their contents, executable resources, native settings, omitted settings, and local requirements. Explain that these files become visible to workspace members. Do not include task code, notes, session traces, or credentials. Scope separates storage; it does not redact file contents.\n\nAfter I choose to publish this reviewed snapshot, use loadout team ${kind === "skill" ? "publish-skill" : "publish"} ${team.teamName} ${kind === "skill" ? "SKILL_NAME" : name} --scope ${team.scope} --reviewed-revision followed by the full revision from capture. If the snapshot changed, inspect the new revision first. Report the published revision and its library link.\n\nSubsequent edits remain local until captured, reviewed, and published again. loadout setup check reports changes without publishing them. Do not start usage collection or continuous sync as part of sharing this snapshot.`;
+  const targetOrigin = location.origin;
+  const targetSetups = `${targetOrigin}/setups`;
+  const targetCheck = `Target Loadout instance: ${targetSetups}\nTarget team ID: ${team.teamId}\n\nUse my existing local remote alias as REMOTE. Run loadout team status REMOTE --scope ${team.scope}, then confirm its url is ${targetOrigin} and its teamId is ${team.teamId}. If no matching alias exists, ask me to choose an unused alias and run loadout team login REMOTE --scope ${team.scope} --url ${targetOrigin}. Wait for me to approve the device code, then check status again. Never publish through an alias pointing elsewhere.`;
+  const captureInstructions = kind === "skill"
+    ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME."
+    : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it. Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}\nCapture and inspection save locally; the publish step below shares the reviewed revision with this workspace.`;
+  const instructions = [
+    `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.`,
+    ...(kind === "setup" ? [targetCheck] : []),
+    captureInstructions,
+    "Show me the exact included files and their contents, executable resources, native settings, omitted settings, and local requirements. Explain that these files become visible to workspace members. Do not include task code, notes, session traces, or credentials. Scope separates storage; it does not redact file contents.",
+    `After I choose to publish this reviewed snapshot, use loadout team ${kind === "skill" ? "publish-skill" : "publish"} ${kind === "setup" ? "REMOTE" : team.teamName} ${kind === "skill" ? "SKILL_NAME" : name} --scope ${team.scope} --reviewed-revision followed by the full revision from capture. If the snapshot changed, inspect the new revision first. Report the published revision and its library link${kind === "setup" ? ` under ${targetSetups}` : ""}.`,
+    "Subsequent edits remain local until captured, reviewed, and published again. loadout setup check reports changes without publishing them. Do not start usage collection or continuous sync as part of sharing this snapshot.",
+  ].join("\n\n");
   return (
     <Modal
       title={kind === "skill" ? "Share a skill" : "Share a native setup"}
@@ -227,6 +240,11 @@ function Publish({
           <li>Inspect files, hooks, requirements, and omitted settings.</li>
           <li>Publish the reviewed revision to this workspace.</li>
         </ol>
+        {kind === "setup" && (
+          <p className="text-small muted spaced">
+            Target workspace: <a href={targetSetups}>{targetSetups}</a>
+          </p>
+        )}
         {validName ? (
           <>
             <Copy text={instructions} label="Copy publishing instructions" />
