@@ -22,6 +22,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && vite build --config web/vite.config.ts",
     "check": "tsc --noEmit -p tsconfig.json && tsc -p web/tsconfig.json",
+    "check:cloudflare": "tsc -p cloudflare/tsconfig.json && wrangler deploy --dry-run",
+    "dev:cloudflare": "npm run build && wrangler dev --port 8787 --var PUBLIC_ORIGIN:http://127.0.0.1:8787",
+    "deploy:cloudflare": "npm run build && wrangler deploy",
+    "setup:cloudflare": "node scripts/cloudflare-setup-link.mjs",
     "security:check": "npm audit --omit=dev --omit=optional",
     "test": "npm run build && node --test test/*.test.mjs",
     "start": "node dist/cli.js",
@@ -46,7 +50,8 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.1.1",
     "typescript": "5.9.3",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "wrangler": "^4.146.0"
   },
   "optionalDependencies": {
     "@earendil-works/pi-coding-agent": "file:vendor/pi-coding-agent-0.99.2-brace-fix.tgz"

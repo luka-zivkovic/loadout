@@ -7,6 +7,7 @@ import type { Store } from "./store.js";
 import { captureSkill, makeSkillPin, validateSkillPins } from "./skills.js";
 
 export const DEFAULT_REVIEW = "Review the change described in PR.diff against the repository in repo/. Use the provided project instructions and context/. Report actionable defects introduced by this change, with file and line references, impact, and evidence. Avoid speculative findings. Do not modify files. End with a concise review.";
+const builtinExtensions = ["mcp", "llama.cpp", "codemode", "tool-search"] as const;
 
 export function assertPinned(source: string) {
   const npm = /^npm:(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/;
@@ -82,7 +83,7 @@ export function captureProfile(options: { name: string; scope: "personal" | "wor
     merged.defaultProvider = options.model.slice(0, slash); merged.defaultModel = options.model.slice(slash + 1);
   }
   const allowed = Object.keys(settingsSchema.shape);
-  const settings = settingsSchema.parse(Object.fromEntries(Object.entries(merged).filter(([k]) => allowed.includes(k))));
+  const settings = settingsSchema.parse(Object.fromEntries(Object.entries(merged).filter(([k]) => k !== "extensions" && allowed.includes(k))));
   const body: ProfileBody = {
     schemaVersion: 1, name: options.name, scope: options.scope, piVersion: PI_VERSION, settings,
     workflow: { id: options.workflowId ?? "pr-review", prompt: options.prompt ?? DEFAULT_REVIEW },
@@ -90,6 +91,7 @@ export function captureProfile(options: { name: string; scope: "personal" | "wor
     omittedSettings: Object.keys(merged).filter(k => !allowed.includes(k) && !["packages", "extensions", "skills", "prompts"].includes(k)).sort(), files: [],
   };
   const copied = new Map<string, string>();
+  const builtinOverrides = new Map<string, "+" | "-">();
   function copy(source: string, target: string): string {
     const path = resolve(source); const existing = copied.get(path); if (existing) return existing;
     const stat = lstatSync(path); if (stat.isSymbolicLink()) throw new Error(`Resolve symlinked resource before capture: ${source}`);
@@ -119,12 +121,26 @@ export function captureProfile(options: { name: string; scope: "personal" | "wor
       }
       const explicit = layer.settings[kind] ?? [];
       if (!Array.isArray(explicit)) throw new Error(`Expected ${kind} to be an array`);
+      const layerBuiltinOverrides = new Map<string, "+" | "-">();
       for (const [i, value] of explicit.entries()) {
+        if (kind === "extensions" && typeof value === "string") {
+          const builtin = /^([!+-])builtin:([a-z0-9.-]+)$/.exec(value);
+          if (builtin) {
+            const operation = builtin[1]!;
+            const name = builtin[2]!;
+            if (!builtinExtensions.some(known => known === name)) throw new Error(`Unknown Pi built-in extension: ${name}`);
+            // Within one Pi settings layer, a force exclusion wins over an
+            // inclusion. A project layer then overrides the global layer.
+            if (operation !== "+" || layerBuiltinOverrides.get(name) !== "-") layerBuiltinOverrides.set(name, operation === "+" ? "+" : "-");
+            continue;
+          }
+        }
         if (typeof value !== "string" || /^[!+-]/.test(value) || /[*?\[\]]/.test(value)) throw new Error(`Capture does not support ${kind} selection patterns; use explicit resource paths`);
         const src = value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(layer.dir, value);
         const target = `${layer.label}/extra-${kind}/${i}/${basename(src)}`;
         const ref = copy(src, target); if (ref && !body.resources[kind].includes(ref)) body.resources[kind].push(ref);
       }
+      for (const [name, operation] of layerBuiltinOverrides) builtinOverrides.set(name, operation);
     }
     if (layer.settings.packages !== undefined && !Array.isArray(layer.settings.packages)) throw new Error("Expected packages to be an array");
     for (const source of (layer.settings.packages ?? []) as unknown[]) {
@@ -142,6 +158,9 @@ export function captureProfile(options: { name: string; scope: "personal" | "wor
     if (existsSync(join(layer.dir, "SYSTEM.md"))) body.systemPrompt = copy(join(layer.dir, "SYSTEM.md"), `${layer.label}/SYSTEM.md`);
     if (existsSync(join(layer.dir, "APPEND_SYSTEM.md"))) body.appendSystemPrompt = [copy(join(layer.dir, "APPEND_SYSTEM.md"), `${layer.label}/APPEND_SYSTEM.md`)];
   }
+  if (builtinOverrides.size) body.settings.extensions = settingsSchema.shape.extensions.parse(
+    [...builtinOverrides].sort(([a], [b]) => a.localeCompare(b)).map(([name, operation]) => `${operation}builtin:${name}`),
+  );
   // Pi also discovers the standard shared skills directory. Include it only for the standard user profile.
   const shared = join(homedir(), ".agents/skills");
   if (agentDir === join(homedir(), ".pi/agent") && existsSync(shared)) {

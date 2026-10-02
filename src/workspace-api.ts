@@ -176,6 +176,46 @@ export function workspaceApi(
       },
     };
   }
+  if (path === "/api/skill-requests") {
+    if (method === "GET")
+      return { value: ops.skillRequests(user.actorId, url.searchParams.get("cursor")) };
+    if (method === "POST")
+      return { value: { request: ops.createSkillRequest(user.actorId, input) } };
+  }
+  const request = /^\/api\/skill-requests\/([^/]+)$/.exec(path);
+  if (request && method === "GET")
+    return { value: { request: ops.skillRequest(user.actorId, request[1]!, url.searchParams.get("cursor")) } };
+  const requestAction =
+    /^\/api\/skill-requests\/([^/]+)\/(interest|comments|archive)$/.exec(path);
+  if (requestAction && method === "POST") {
+    const requestId = requestAction[1]!;
+    if (requestAction[2] === "interest")
+      return {
+        value: {
+          request: ops.setSkillRequestInterest(user.actorId, requestId, input),
+        },
+      };
+    if (requestAction[2] === "comments")
+      return {
+        value: {
+          request: ops.commentOnSkillRequest(user.actorId, requestId, input),
+        },
+      };
+    z.object({}).strict().parse(input);
+    return { value: ops.archiveSkillRequest(user.actorId, requestId) };
+  }
+  const requestComment =
+    /^\/api\/skill-requests\/([^/]+)\/comments\/([^/]+)\/hide$/.exec(path);
+  if (requestComment && method === "POST") {
+    z.object({}).strict().parse(input);
+    return {
+      value: ops.hideSkillRequestComment(
+        user.actorId,
+        requestComment[1]!,
+        requestComment[2]!,
+      ),
+    };
+  }
   if (path === "/api/trials" && method === "POST")
     return {
       value: { trial: ops.createTrial(user.actorId, trialInput.parse(input)) },

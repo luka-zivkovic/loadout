@@ -246,6 +246,9 @@ export function People({ user }: { user: WebUser }) {
               aria-label="Filter by company team"
             >
               <option value="">All teams</option>
+              {team && !teams.includes(team) && (
+                <option value={team}>Unavailable team: {team}</option>
+              )}
               {teams.map((value) => (
                 <option key={value} value={value}>
                   {value}

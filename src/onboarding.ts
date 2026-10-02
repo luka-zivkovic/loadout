@@ -4,13 +4,7 @@ export type ComparableSetup = {
   harness?: { kind: string };
 };
 
-export type WorkspaceStep =
-  | "connect-device"
-  | "publish-setup"
-  | "continue-trial"
-  | "measure-run"
-  | "publish-comparable"
-  | "start-trial";
+export type WorkspaceStep = "connect-device" | "publish-setup";
 
 export function hasComparableSetups(setups: ComparableSetup[]) {
   return setups.some((setup, index) =>
@@ -27,20 +21,11 @@ export function hasComparableSetups(setups: ComparableSetup[]) {
 export function nextWorkspaceStep({
   deviceReady,
   setupCount,
-  runCount,
-  comparable,
-  pendingTrialCount,
 }: {
   deviceReady: boolean;
   setupCount: number;
-  runCount: number;
-  comparable: boolean;
-  pendingTrialCount: number;
-}): WorkspaceStep {
+}): WorkspaceStep | null {
   if (!deviceReady) return "connect-device";
   if (!setupCount) return "publish-setup";
-  if (pendingTrialCount) return "continue-trial";
-  if (!runCount) return "measure-run";
-  if (!comparable) return "publish-comparable";
-  return "start-trial";
+  return null;
 }

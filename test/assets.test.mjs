@@ -45,6 +45,17 @@ test('skills preserve supporting files and executable bits, enforce compatibilit
   mkdirSync(join(dir, 'real')); symlinkSync(join(dir, 'real'), join(dir, 'link')); assert.throws(() => installSkill(skill, 'codex', join(dir, 'link/skill')), /symlink/);
   put(join(dir, 'native-skill/SKILL.md'), '---\nname: native\ndescription: Native behavior\ncontext: fork\n---\nDo work.');
   assert.throws(() => captureSkill({ dir: join(dir, 'native-skill'), scope: 'work' }), /--compatible/);
+  const portable = captureSkill({ dir: join(dir, 'skill'), scope: 'work', compatibleWith: ['pi', 'claude-code', 'codex', 'cursor', 'opencode'] });
+  for (const harness of ['cursor', 'opencode']) {
+    const dest = skillDestination(portable.name, harness, join(dir, harness));
+    assert.equal(dest, join(dir, harness, '.agents/skills', portable.name));
+    installSkill(portable, harness, dest);
+    assert.equal(readFileSync(join(dest, 'SKILL.md'), 'utf8'), readFileSync(join(dir, 'skill/SKILL.md'), 'utf8'));
+  }
+  put(join(dir, 'bad-name/SKILL.md'), '---\nname: Bad_Name\ndescription: Native behavior\n---\nDo work.');
+  assert.throws(() => captureSkill({ dir: join(dir, 'bad-name'), scope: 'work', compatibleWith: ['opencode'] }), /lowercase words/);
+  put(join(dir, 'long-description/SKILL.md'), `---\nname: long-description\ndescription: ${'a'.repeat(1025)}\n---\nDo work.`);
+  assert.throws(() => captureSkill({ dir: join(dir, 'long-description'), scope: 'work', compatibleWith: ['opencode'] }), /1024 characters/);
 });
 
 test('the same standalone skill pins into Pi, Claude Code, and Codex without translating native configuration', t => {
@@ -78,6 +89,7 @@ test('native capture excludes credentials, telemetry, memory, task context, and 
   put(join(claude, '.mcp.json'), '{"mcpServers":{"docs":{"type":"http","url":"https://example.invalid/mcp","headers":{"Authorization":"PRIVATE_TOKEN"}}}}');
   const c = captureSetup({ name: 'claude-safe', scope: 'work', harness: 'claude-code', agentDir: claude, version: '1.2.3' }); assert(!JSON.stringify(c).includes('PRIVATE_')); assert(!JSON.stringify(c).includes('example.invalid')); assert.deepEqual(c.mcpServerNames, ['docs']); assert(!('mcpServers' in c));
   const out = join(dir, 'claude-export'); materializeSetup(c, out); assert(!existsSync(join(out, 'mcp.json')));
+  assert.throws(() => captureSetup({ name: 'bad', scope: 'work', harness: 'cursor', agentDir: root }), /Invalid option|Invalid value/);
 });
 
 test('registry rejects legacy MCP definitions while retaining historical revision validation', t => {
@@ -135,6 +147,26 @@ test('skill registry exchange preserves ownership, old revisions, conflicts, and
   const reopened = new Registry(join(dir, 'registry')); assert.equal(reopened.skills()[0].revision, next.revision); reopened.close();
 });
 
+test('large skill payloads stay below Cloudflare SQLite row limits and survive reopen', t => {
+  const dir = temp(t);
+  const skillDir = join(dir, 'large-skill');
+  makeSkill(skillDir);
+  put(join(skillDir, 'references/large.txt'), 'x'.repeat(1_700_000));
+  const skill = captureSkill({ dir: skillDir, scope: 'work' });
+  const registryDir = join(dir, 'registry');
+  const registry = new Registry(registryDir, { teamName: 'team', scope: 'work' });
+  registry.publishSkill('alice', skill, null);
+  const chunks = registry.db.prepare("SELECT COUNT(*) AS count,MAX(length(CAST(body AS BLOB))) AS maxBytes FROM artifact_chunks WHERE kind='skill' AND revision=?").get(skill.revision);
+  assert(Number(chunks.count) > 1);
+  assert(Number(chunks.maxBytes) < 2_000_000);
+  assert.equal(registry.skill('alice', skill.name, skill.revision).revision, skill.revision);
+  assert(registry.ops.usage().bytes >= 2_000_000);
+  registry.close();
+  const reopened = new Registry(registryDir);
+  assert.equal(reopened.skill('alice', skill.name, skill.revision).revision, skill.revision);
+  reopened.close();
+});
+
 test('native telemetry keeps counters only, deduplicates exports, and labels missing coverage and unverified completion', t => {
   const dir = temp(t); const setup = native(join(dir, 'claude'), 'claude-code'); const store = new Store(join(dir, 'store'), 'work');
   const collector = new NativeTelemetry(setup, store);
@@ -187,4 +219,17 @@ test('CLI captures, pins, extracts, materializes, and installs a skill without c
   cli('skill', 'extract', 'review', 'precise-review'); cli('skill', 'install', 'precise-review', '--harness', 'claude-code', '--project', join(dir, 'project'));
   assert(existsSync(join(dir, 'project/.claude/skills/precise-review/SKILL.md'))); assert.equal(JSON.parse(cli('profile', 'list')).length, 0);
   assert.throws(() => cli('run', 'review', '--packet', dir));
+});
+
+test('CLI installs declared Cursor and OpenCode skills through the shared Agent Skills path', t => {
+  const dir = temp(t); makeSkill(join(dir, 'skill'));
+  const cli = (...args) => execFileSync(process.execPath, ['dist/cli.js', ...args, '--home', join(dir, 'store'), '--scope', 'work'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const captured = JSON.parse(cli('skill', 'capture', join(dir, 'skill'), '--compatible', 'cursor,opencode'));
+  assert.deepEqual(captured.compatibleWith, ['cursor', 'opencode']);
+  for (const harness of ['cursor', 'opencode']) {
+    const project = join(dir, harness);
+    cli('skill', 'install', 'precise-review', '--harness', harness, '--project', project);
+    assert(existsSync(join(project, '.agents/skills/precise-review/SKILL.md')));
+  }
+  assert.throws(() => cli('setup', 'capture', 'wrong', '--harness', 'cursor', '--agent-dir', dir));
 });

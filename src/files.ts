@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { Buffer } from "node:buffer";
 import {
   existsSync,
   lstatSync,

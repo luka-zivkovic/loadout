@@ -810,7 +810,10 @@ type Device = {
   } | null;
 };
 export function Devices({ team }: { team: Dashboard["team"] }) {
-  const [showInstructions, setShowInstructions] = useState(false);
+  const [connect] = useParam("connect");
+  const showInstructions = connect === "1";
+  const setShowInstructions = (open: boolean) =>
+    setParam("connect", open ? "1" : null, !open);
   const [measure, setMeasure] = useParam("measure");
   const [measurementHarness, setMeasurementHarness] = useState<Harness>("pi");
   const [awaiting, setAwaiting] = useState(false);
@@ -835,6 +838,7 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
     (device) =>
       !device.revokedAt && Date.parse(device.expiresAt) > Date.now(),
   );
+  const loginCommand = `loadout team login ${team.teamName} --scope ${team.scope} --url ${location.origin}`;
   const syncCommand = `loadout team sync REMOTE_NAME --scope ${team.scope}`;
   const measurementInstructions =
     measurementHarness === "pi"
@@ -913,16 +917,16 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
       {message && <div className="success spaced">{message}</div>}
       <div className="page-action-row">
         <p className="muted">
-          Device authorization, configuration sharing, and measurement are
-          separate actions.
+          Connect a device, then share one reviewed setup snapshot. Measuring
+          usage is optional.
         </p>
         <div className="row-actions">
           {activeDevices.length > 0 && (
             <button
               className="button primary"
-              onClick={() => setMeasure("1")}
+              onClick={() => go("/setups?share=1")}
             >
-              Start measuring
+              Share a setup once
             </button>
           )}
           <button
@@ -1126,6 +1130,17 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
           </div>
         </section>
       </div>
+      <section className="panel spaced">
+        <div className="panel-heading">
+          <div>
+            <h2>Optional usage collection</h2>
+            <p>Measure a chosen workflow only when you want usage data.</p>
+          </div>
+          <button className="button secondary" onClick={() => setMeasure("1")}>
+            Set up measurement
+          </button>
+        </div>
+      </section>
       {measure === "1" && (
         <Modal
           title="Measure your first workflow"
@@ -1170,19 +1185,42 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
       )}
       {showInstructions && (
         <Modal
-          title="Connect or renew a device"
+          title={
+            activeDevices.length
+              ? "Connect or renew a device"
+              : "Connect your first device"
+          }
           close={() => setShowInstructions(false)}
           compact
         >
           <div className="modal-body">
             <p>
-              Use the existing remote name to renew a login. Loadout preserves
-              sync history after verifying the same server, team, and member.
+              Give the instructions below to your local Pi, Claude Code, or
+              Codex agent. They guide one-time setup sharing after you approve
+              the device.
             </p>
-            <Copy text={instructions} label="Copy harness instructions" />
+            {instructions ? (
+              <Copy text={instructions} label="Copy agent instructions" primary />
+            ) : (
+              <p>Loading instructions…</p>
+            )}
             <details className="spaced">
-              <summary>Read connection instructions</summary>
-              <pre>{instructions || "Loading…"}</pre>
+              <summary>Manual login command</summary>
+              <pre>{loginCommand}</pre>
+              <Copy text={loginCommand} label="Copy login command" />
+            </details>
+            <p className="spaced">
+              Open the approval link printed by the CLI and confirm its device
+              code here. Then check the connection with{" "}
+              <code>
+                loadout team status {team.teamName} --scope {team.scope}
+              </code>
+              . The copied agent instructions then guide a one-time setup capture
+              and review. Nothing is published until you approve the snapshot.
+            </p>
+            <details className="spaced">
+              <summary>Read agent instructions</summary>
+              <pre>{instructions || "Loading instructions…"}</pre>
             </details>
           </div>
         </Modal>
@@ -1232,26 +1270,42 @@ type Invite = {
   consumedAt: string | null;
   revokedAt: string | null;
 };
+type TeamInviteLink = {
+  linkId: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  useCount: number;
+  createdBy: string;
+};
 export function TeamAccess({ user }: { user: WebUser }) {
   const [users, setUsers] = useState<WebUser[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [links, setLinks] = useState<TeamInviteLink[]>([]);
   const [error, setError] = useState("");
   const [invite, setInvite] = useState(false);
+  const [createLink, setCreateLink] = useState(false);
   const [link, setLink] = useState<{
     url: string;
     expiresAt: string;
     kind: string;
+    multiUse?: boolean;
   } | null>(null);
   const [action, setAction] = useState<{
     target: WebUser;
     role?: "admin" | "member";
     disabled?: boolean;
   } | null>(null);
-  const reload = () =>
-    api("/admin/team").then((r) => {
-      setUsers(r.users);
-      setInvites(r.invitations);
-    });
+  const reload = async () => {
+    const request = api<{ links: TeamInviteLink[] }>("/invite-links").then((r) => setLinks(r.links));
+    if (user.role === "admin") {
+      const admin = api<{ users: WebUser[]; invitations: Invite[] }>("/admin/team").then((r) => {
+        setUsers(r.users);
+        setInvites(r.invitations);
+      });
+      await Promise.all([request, admin]);
+    } else await request;
+  };
   useEffect(() => {
     reload().catch((e) => setError(e.message));
   }, []);
@@ -1259,9 +1313,47 @@ export function TeamAccess({ user }: { user: WebUser }) {
     (i) =>
       !i.consumedAt && !i.revokedAt && Date.parse(i.expiresAt) > Date.now(),
   );
+  const activeLinks = links.filter((i) => !i.revokedAt && Date.parse(i.expiresAt) > Date.now());
   return (
     <>
       <ErrorBox error={error} />
+      <section className="panel">
+        <div className="panel-heading team-invite-heading">
+          <div>
+            <h2>Team invitation links <span className="badge">{activeLinks.length} active</span></h2>
+            <p>Share one link with several teammates. Each person joins as a member before it expires. Copy the link when created; it cannot be shown again.</p>
+          </div>
+          <button className="button primary" onClick={() => setCreateLink(true)}>
+            <Plus size={15} /> Create link
+          </button>
+        </div>
+        {links.length ? (
+          <div className="table-wrap">
+            <table className="team-invite-table">
+              <thead><tr><th>Created by</th><th>Expires</th><th>Joined</th><th>Status</th><th /></tr></thead>
+              <tbody>
+                {links.map((item) => {
+                  const status = item.revokedAt ? "Revoked" : Date.parse(item.expiresAt) <= Date.now() ? "Expired" : "Active";
+                  return (
+                    <tr key={item.linkId}>
+                      <td data-label="Created by">{item.createdBy === user.actorId ? "You" : item.createdBy}</td>
+                      <td data-label="Expires">{date(item.expiresAt)}</td>
+                      <td data-label="Joined">{item.useCount}</td>
+                      <td data-label="Status"><span className={`badge ${status === "Active" ? "green" : ""}`}>{status}</span></td>
+                      <td className="team-invite-action">{status === "Active" && (user.role === "admin" || item.createdBy === user.actorId) ? (
+                        <button className="text-button" onClick={() => api("/invite-links/revoke", { linkId: item.linkId }).then(reload).catch((e) => setError(e.message))}>Revoke</button>
+                      ) : null}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="inline-empty">No invitation links yet. Create one, then share it privately with your team.</div>
+        )}
+      </section>
+      {user.role === "admin" && <>
       <section className="panel">
         <div className="panel-heading">
           <div>
@@ -1272,9 +1364,9 @@ export function TeamAccess({ user }: { user: WebUser }) {
               Admins manage accounts. Members share setups and review activity.
             </p>
           </div>
-          <button className="button primary" onClick={() => setInvite(true)}>
+          <button className="button" onClick={() => setInvite(true)}>
             <Plus size={15} />
-            Invite teammate
+            Invite one person
           </button>
         </div>
         <div className="table-wrap">
@@ -1410,6 +1502,17 @@ export function TeamAccess({ user }: { user: WebUser }) {
         )}
       </section>
       <WorkspaceOperations />
+      </>}
+      {createLink && (
+        <TeamInviteLinkForm
+          close={() => setCreateLink(false)}
+          saved={async (r) => {
+            setCreateLink(false);
+            setLink({ ...r, kind: "Team invitation", multiUse: true });
+            await reload();
+          }}
+        />
+      )}
       {invite && (
         <InviteForm
           close={() => setInvite(false)}
@@ -1428,9 +1531,10 @@ export function TeamAccess({ user }: { user: WebUser }) {
         >
           <div className="modal-body">
             <p>
-              Share this link privately with the intended recipient. It can be
-              used once and expires {date(link.expiresAt)}. Copy it now; the
-              server keeps only its hash.
+              {link.multiUse
+                ? `Share this link privately with teammates. Multiple people can join as members until ${date(link.expiresAt)}.`
+                : `Share this link privately with the intended recipient. It can be used once and expires ${date(link.expiresAt)}.`}
+              {" "}Copy it now; the server keeps only its hash.
             </p>
             <pre>{link.url}</pre>
             <Copy text={link.url} label="Copy private link" />
@@ -1498,6 +1602,59 @@ export function TeamAccess({ user }: { user: WebUser }) {
         </Modal>
       )}
     </>
+  );
+}
+function localDateTime(value: Date) {
+  return new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+function TeamInviteLinkForm({
+  close,
+  saved,
+}: {
+  close: () => void;
+  saved: (value: { url: string; expiresAt: string }) => Promise<void>;
+}) {
+  const [bounds] = useState(() => {
+    const now = Date.now();
+    return {
+      min: localDateTime(new Date(now + 6 * 60_000)),
+      initial: localDateTime(new Date(now + 7 * 86_400_000)),
+      max: localDateTime(new Date(now + 30 * 86_400_000 - 60_000)),
+    };
+  });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const raw = new FormData(e.currentTarget).get("expiresAt");
+      const expiry = new Date(String(raw));
+      if (Number.isNaN(expiry.getTime())) throw new Error("Choose a valid expiry date and time.");
+      await saved(await api("/invite-links", { expiresAt: expiry.toISOString() }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Create team invitation link" close={close} compact>
+      <form onSubmit={submit} className="modal-body">
+        <p className="muted">Anyone with this link can create a member account until it expires. Share it only with teammates.</p>
+        <Field label="Link expires" hint="Choose a time within the next 30 days.">
+          <input name="expiresAt" type="datetime-local" min={bounds.min} max={bounds.max} defaultValue={bounds.initial} required />
+        </Field>
+        <ErrorBox error={error} />
+        <div className="modal-actions">
+          <button className="button" type="button" onClick={close}>Cancel</button>
+          <button className="button primary" disabled={busy}>{busy ? "Creating…" : "Create link"}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 function InviteForm({

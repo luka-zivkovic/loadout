@@ -3,14 +3,14 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 import { jsonRead, jsonWrite } from "./files.js";
 import { captureSetup, listSetups, nativeAgentDir } from "./setups.js";
-import { harnessSchema, id, hash } from "./schema.js";
+import { setupHarnessSchema, id, hash } from "./schema.js";
 import type { Store } from "./store.js";
 import { collectorLeases } from "./checkpoints.js";
 
 const optionsSchema = z.object({
   name: id,
   scope: z.enum(["work", "personal"]),
-  harness: harnessSchema,
+  harness: setupHarnessSchema,
   agentDir: z.string().optional(),
   project: z.string().optional(),
   workflowId: z.string().optional(),

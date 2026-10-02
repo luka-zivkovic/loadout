@@ -1,7 +1,6 @@
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  hasComparableSetups,
   nextWorkspaceStep,
   type WorkspaceStep,
 } from "../src/onboarding";
@@ -24,30 +23,6 @@ const stepCopy: Record<
     description:
       "Capture a reusable configuration, inspect its contents, then publish that exact revision.",
     action: "Share a setup",
-  },
-  "continue-trial": {
-    title: "Finish the comparison in progress",
-    description:
-      "Complete its local runs, inspect the evidence, and record a decision before starting another.",
-    action: "Continue comparison",
-  },
-  "measure-run": {
-    title: "Sync your first measured run",
-    description:
-      "Start collection before the work, finalize it locally, then sync the resulting metadata.",
-    action: "Start measuring",
-  },
-  "publish-comparable": {
-    title: "Add a comparable setup",
-    description:
-      "Share another revision with the same harness and workflow before creating a comparison.",
-    action: "Share another setup",
-  },
-  "start-trial": {
-    title: "Compare two setups",
-    description:
-      "Use compatible revisions, run the task locally, and record what the evidence supports.",
-    action: "Start a comparison",
   },
 };
 
@@ -85,36 +60,21 @@ export function OverviewNext({
     ?.flatMap((device) => (device.syncedAt ? [device.syncedAt] : []))
     .sort()
     .at(-1);
-  const pending = data.trials.filter((trial) => !trial.conclusion);
-  const comparable = hasComparableSetups(data.profiles);
   const step =
     devices === null
       ? null
       : nextWorkspaceStep({
           deviceReady: Boolean(active?.length),
           setupCount: data.profiles.length,
-          runCount: data.liveRunCount,
-          comparable,
-          pendingTrialCount: pending.length,
         });
   const nextPath = step
     ? step === "connect-device"
-      ? "/devices"
-      : step === "publish-setup" || step === "publish-comparable"
-        ? "/setups?share=1"
-        : step === "measure-run"
-          ? "/devices?measure=1"
-          : step === "continue-trial"
-            ? pending[0]
-              ? `/comparisons?trial=${pending[0].trialId}`
-              : "/comparisons"
-            : "/comparisons?new=1"
+      ? "/devices?connect=1"
+      : "/setups?share=1"
     : "";
   const readiness = [
     { label: "Device connected", done: Boolean(active?.length) },
     { label: "Setup shared", done: Boolean(data.profiles.length) },
-    { label: "First run synced", done: Boolean(data.liveRunCount) },
-    { label: "Ready to compare", done: comparable },
   ];
   return (
     <div className={`overview-next${showSetups ? "" : " compact"}`}>
@@ -122,11 +82,9 @@ export function OverviewNext({
         <div className="panel-heading">
           <div>
             <h2>
-              {data.liveRunCount
-                ? "Your next useful step"
-                : "Get to your first shared run"}
+              {data.profiles.length ? "Your setup is shared" : "Share your setup once"}
             </h2>
-            <p>Complete one real step at a time. Advanced tools can wait.</p>
+            <p>Connect a device and publish one reviewed snapshot. Usage collection is optional.</p>
           </div>
         </div>
         <div className="onboarding-body">
@@ -152,8 +110,14 @@ export function OverviewNext({
                   {stepCopy[step].action}
                 </button>
               </>
-            ) : (
+            ) : devices === null ? (
               <p>Checking workspace readiness…</p>
+            ) : (
+              <>
+                <strong>Ready to use</strong>
+                <p>Your published setup stays available without ongoing collection. Capture and publish again only when you want to share a change.</p>
+                <button className="button secondary" onClick={() => navigate("/setups")}>Browse shared setups</button>
+              </>
             )}
             {lastSync && (
               <small>Last successful device sync {date(lastSync)}</small>

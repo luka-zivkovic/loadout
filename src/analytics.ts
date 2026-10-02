@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import {
   assessmentSchema,
-  harnessSchema,
+  setupHarnessSchema,
   hash,
   metricsSchema,
 } from "./schema.js";
@@ -16,7 +16,7 @@ export function periodFilter(url: URL) {
     .enum(["live", "demo"])
     .parse(url.searchParams.get("mode") ?? "live");
   const harness = url.searchParams.get("harness")
-    ? harnessSchema.parse(url.searchParams.get("harness"))
+    ? setupHarnessSchema.parse(url.searchParams.get("harness"))
     : null;
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);

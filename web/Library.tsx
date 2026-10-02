@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import {
   harnessLabels,
+  setupHarnessSchema,
   type Harness,
   type NativeSetup,
   type Profile,
@@ -152,6 +153,7 @@ export function HarnessSelect({
   allowed?: Harness[];
   all?: boolean;
 }) {
+  const unavailable = Boolean(value) && !allowed.includes(value as Harness);
   return (
     <select
       aria-label={label}
@@ -159,6 +161,7 @@ export function HarnessSelect({
       onChange={(e) => onChange(e.target.value)}
     >
       {all && <option value="">All harnesses</option>}
+      {unavailable && <option value={value}>Unavailable harness: {value}</option>}
       {allowed.map((h) => (
         <option key={h} value={h}>
           {harnessLabels[h]}
@@ -179,7 +182,7 @@ function Publish({
   const [harness, setHarness] = useState("pi");
   const [name, setName] = useState("my-review-setup");
   const validName = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(name);
-  const instructions = `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.\n\n${kind === "skill" ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME." : `Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}`}\n\nShow me the exact included files and their contents, executable resources, native settings, omitted settings, and local requirements. Explain that these files become visible to workspace members. Do not include task code, notes, session traces, or credentials. Scope separates storage; it does not redact file contents.\n\nAfter I choose to publish this reviewed snapshot, use loadout team ${kind === "skill" ? "publish-skill" : "publish"} ${team.teamName} ${kind === "skill" ? "SKILL_NAME" : name} --scope ${team.scope} --reviewed-revision followed by the full revision from capture. If the snapshot changed, inspect the new revision first. Report the published revision and its library link.\n\nSubsequent edits remain local until captured, reviewed, and published again. loadout setup check reports changes without publishing them.`;
+  const instructions = `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.\n\n${kind === "skill" ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME." : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it. Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}`}\n\nShow me the exact included files and their contents, executable resources, native settings, omitted settings, and local requirements. Explain that these files become visible to workspace members. Do not include task code, notes, session traces, or credentials. Scope separates storage; it does not redact file contents.\n\nAfter I choose to publish this reviewed snapshot, use loadout team ${kind === "skill" ? "publish-skill" : "publish"} ${team.teamName} ${kind === "skill" ? "SKILL_NAME" : name} --scope ${team.scope} --reviewed-revision followed by the full revision from capture. If the snapshot changed, inspect the new revision first. Report the published revision and its library link.\n\nSubsequent edits remain local until captured, reviewed, and published again. loadout setup check reports changes without publishing them. Do not start usage collection or continuous sync as part of sharing this snapshot.`;
   return (
     <Modal
       title={kind === "skill" ? "Share a skill" : "Share a native setup"}
@@ -188,8 +191,9 @@ function Publish({
     >
       <div className="modal-body">
         <p>
-          Capture locally, review the exact contents, then publish a pinned
-          revision. Your harness can carry out these steps with you.
+          {kind === "setup"
+            ? "Share one snapshot of your current setup. Capture locally, review the exact contents, then publish that revision. Usage collection is optional."
+            : "Capture your skill locally, review its contents, then publish the exact revision."}
         </p>
         {kind === "setup" && (
           <>
@@ -197,6 +201,7 @@ function Publish({
               <HarnessSelect
                 value={harness}
                 onChange={setHarness}
+                allowed={setupHarnessSchema.options}
                 all={false}
                 label="Setup harness"
               />
@@ -287,6 +292,8 @@ export function Setups({ data, refresh, user }: LibraryProps) {
   const [share, setShare] = useParam("share");
   const publish = share === "1";
   const setPublish = (open: boolean) => setShare(open ? "1" : null);
+  const workflows = [...new Set(data.profiles.map((p) => p.workflowId))];
+  const models = [...new Set(data.profiles.map((p) => p.model))];
   const list = data.profiles
     .filter(
       (p) =>
@@ -326,7 +333,7 @@ export function Setups({ data, refresh, user }: LibraryProps) {
           <button aria-pressed={!harness} onClick={() => setHarness(null)}>
             All setups <span>{data.profiles.length}</span>
           </button>
-          {(Object.keys(harnessLabels) as Harness[]).map((h) => (
+          {setupHarnessSchema.options.map((h) => (
             <button
               key={h}
               aria-pressed={harness === h}
@@ -342,6 +349,11 @@ export function Setups({ data, refresh, user }: LibraryProps) {
               </span>
             </button>
           ))}
+          {harness && !setupHarnessSchema.options.includes(harness as (typeof setupHarnessSchema.options)[number]) && (
+            <button aria-pressed="true" onClick={() => setHarness(null)}>
+              Unavailable harness: {harness} · Clear
+            </button>
+          )}
         </div>
         <div className="search-row library-filters registry-filters">
           <div className="search-field">
@@ -361,7 +373,10 @@ export function Setups({ data, refresh, user }: LibraryProps) {
             onChange={(e) => setWorkflow(e.target.value)}
           >
             <option value="">All workflows</option>
-            {[...new Set(data.profiles.map((p) => p.workflowId))].map((w) => (
+            {workflow && !workflows.includes(workflow) && (
+              <option value={workflow}>Unavailable workflow: {workflow}</option>
+            )}
+            {workflows.map((w) => (
               <option key={w}>{w}</option>
             ))}
           </select>
@@ -371,7 +386,10 @@ export function Setups({ data, refresh, user }: LibraryProps) {
             onChange={(e) => setModel(e.target.value)}
           >
             <option value="">All models</option>
-            {[...new Set(data.profiles.map((p) => p.model))].map((m) => (
+            {model && !models.includes(model) && (
+              <option value={model}>Unavailable model: {model}</option>
+            )}
+            {models.map((m) => (
               <option key={m}>{m}</option>
             ))}
           </select>
@@ -933,10 +951,15 @@ export function Skills({ data, refresh, user }: LibraryProps) {
               replacing your setup.
             </p>
           </div>
-          <button className="button primary" onClick={() => setPublish(true)}>
-            <Plus size={15} />
-            Share a skill
-          </button>
+          <div className="request-library-actions">
+            <button className="button" onClick={() => go("/requests")}>
+              Request a skill
+            </button>
+            <button className="button primary" onClick={() => setPublish(true)}>
+              <Plus size={15} />
+              Share a skill
+            </button>
+          </div>
         </div>
         <div className="search-row library-filters">
           <div className="search-field">

@@ -264,6 +264,144 @@ test("members maintain their own profile and discover active colleagues", async 
   );
 });
 
+test("skill requests support anonymous discussion, interest, and moderation", async (t) => {
+  const f = await fixture(t);
+  const admin = await f.firstAdmin();
+  const author = await f.member(admin, "alice");
+  const colleague = await f.member(admin, "bob");
+  const path = "/api/skill-requests";
+
+  assert.equal((await f.call(path)).status, 401);
+  assert.equal(
+    (await f.call(path, { title: "A useful skill", body: "Help with recurring reviews", anonymous: true }, author, { "X-CSRF-Token": "" })).status,
+    403,
+  );
+  assert.equal(
+    (await f.call(path, { title: "Short", body: "tiny", anonymous: true }, author)).status,
+    400,
+  );
+  const created = await f.call(
+    path,
+    {
+      title: "Review migrations before deploy",
+      body: "Check schema changes for safe rollout and rollback steps.",
+      anonymous: true,
+    },
+    author,
+  );
+  assert.equal(created.status, 200);
+  const id = created.value.request.id;
+  assert.equal(created.value.request.mine, true);
+  assert.equal(created.value.request.author, "Anonymous");
+
+  const listed = await f.call(path, undefined, colleague);
+  assert.equal(listed.value.requests.length, 1);
+  assert.equal(listed.value.requests[0].author, "Anonymous");
+  assert.equal(listed.value.requests[0].mine, false);
+  assert.equal(listed.value.requests[0].moderatorAuthor, undefined);
+  assert.equal(JSON.stringify(listed.value).includes("alice"), false);
+  const adminList = await f.call(path, undefined, admin);
+  assert.equal(adminList.value.requests[0].moderatorAuthor, "alice");
+
+  for (let i = 0; i < 2; i++) {
+    const vote = await f.call(`${path}/${id}/interest`, { interested: true }, colleague);
+    assert.equal(vote.status, 200);
+    assert.equal(vote.value.request.interestCount, 1);
+    assert.equal(vote.value.request.interested, true);
+  }
+  const unvote = await f.call(`${path}/${id}/interest`, { interested: false }, colleague);
+  assert.equal(unvote.status, 200);
+  assert.equal(unvote.value.request.interestCount, 0);
+  assert.equal(unvote.value.request.interested, false);
+  const comment = await f.call(
+    `${path}/${id}/comments`,
+    { body: "We also need to check backward compatibility.", anonymous: true },
+    colleague,
+  );
+  assert.equal(comment.status, 200);
+  const commentId = comment.value.request.comments[0].id;
+  assert.equal(comment.value.request.commentCount, 1);
+  const authorDetail = await f.call(`${path}/${id}`, undefined, author);
+  assert.equal(authorDetail.value.request.comments[0].author, "Anonymous");
+  assert.equal(authorDetail.value.request.comments[0].moderatorAuthor, undefined);
+  assert.equal(JSON.stringify(authorDetail.value).includes("bob"), false);
+  const adminDetail = await f.call(`${path}/${id}`, undefined, admin);
+  assert.equal(adminDetail.value.request.comments[0].moderatorAuthor, "bob");
+
+  assert.equal(
+    (await f.call(`${path}/${id}/comments/${commentId}/hide`, {}, author)).status,
+    403,
+  );
+  assert.equal(
+    (await f.call(`${path}/${id}/comments/${commentId}/hide`, {}, admin)).status,
+    200,
+  );
+  assert.equal(
+    (await f.call(`${path}/${id}`, undefined, colleague)).value.request.commentCount,
+    0,
+  );
+  assert.equal((await f.call(`${path}/${id}/archive`, {}, colleague)).status, 403);
+  assert.equal((await f.call(`${path}/${id}/archive`, {}, author)).status, 200);
+  assert.equal((await f.call(path, undefined, author)).value.requests.length, 0);
+  assert.ok((await f.call(`${path}/${id}`, undefined, admin)).value.request.archivedAt);
+  assert.equal(
+    (await f.call(`${path}/${id}/comments`, { body: "Later", anonymous: false }, colleague)).status,
+    409,
+  );
+});
+
+test("skill request and discussion pages stay bounded and complete", async (t) => {
+  const f = await fixture(t);
+  const admin = await f.firstAdmin();
+  const member = await f.member(admin, "requester");
+  const path = "/api/skill-requests";
+  const created = [];
+  for (let i = 0; i < 25; i++) {
+    const result = f.registry.ops.createSkillRequest(member.user.actorId, {
+      title: `Skill idea number ${i}`,
+      body: `A reusable workflow for scenario ${i}.`,
+      anonymous: false,
+    });
+    created.push(result.id);
+  }
+  const first = await f.call(path, undefined, member);
+  assert.equal(first.status, 200);
+  assert.equal(first.value.total, 25);
+  assert.equal(first.value.requests.length, 20);
+  assert(first.value.nextCursor);
+  const second = await f.call(`${path}?cursor=${encodeURIComponent(first.value.nextCursor)}`, undefined, member);
+  assert.equal(second.status, 200);
+  assert.equal(second.value.requests.length, 5);
+  assert.equal(second.value.nextCursor, null);
+  assert.equal(new Set([...first.value.requests, ...second.value.requests].map((request) => request.id)).size, 25);
+  assert.equal((await f.call(`${path}?cursor=invalid`, undefined, member)).status, 400);
+
+  const requestId = created[0];
+  for (let i = 0; i < 35; i++)
+    f.registry.ops.commentOnSkillRequest(member.user.actorId, requestId, {
+      body: `Comment number ${i}`,
+      anonymous: false,
+    });
+  const detail = await f.call(`${path}/${requestId}`, undefined, member);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.value.request.commentCount, 35);
+  assert.equal(detail.value.request.comments.length, 30);
+  assert(detail.value.request.nextCommentCursor);
+  const older = await f.call(
+    `${path}/${requestId}?cursor=${encodeURIComponent(detail.value.request.nextCommentCursor)}`,
+    undefined,
+    member,
+  );
+  assert.equal(older.status, 200);
+  assert.equal(older.value.request.comments.length, 5);
+  assert.equal(older.value.request.nextCommentCursor, null);
+  assert.equal(
+    new Set([...detail.value.request.comments, ...older.value.request.comments].map((comment) => comment.id)).size,
+    35,
+  );
+  assert.equal((await f.call(`${path}/${requestId}?cursor=invalid`, undefined, member)).status, 400);
+});
+
 test("first admin requires a host-issued key, normalizes identity, and can be claimed only once", async (t) => {
   const f = await fixture(t);
   assert.equal((await f.call("/api/session")).value.setupRequired, true);
@@ -483,6 +621,64 @@ test("admin invitations bind identity and role, reject replay, revocation, expir
   const pending = await f.call("/api/admin/team", undefined, admin);
   assert(!JSON.stringify(pending.value).includes("token_hash"));
   assert(!JSON.stringify(pending.value).includes(invite.value.token));
+});
+
+test("members create expiring multi-use links and teammates can join concurrently", async (t) => {
+  const f = await fixture(t);
+  const admin = await f.firstAdmin();
+  const alice = await f.member(admin, "alice");
+  const bob = await f.member(admin, "bob");
+  const expiresAt = new Date(Date.now() + 2 * 86_400_000).toISOString();
+  assert.equal((await f.call("/api/invite-links")).status, 401);
+  assert.equal((await f.call("/api/invite-links", { expiresAt }, alice, { "X-CSRF-Token": "" })).status, 403);
+  assert.equal((await f.call("/api/invite-links", { expiresAt: new Date(Date.now() + 2 * 60_000).toISOString() }, alice)).status, 400);
+  assert.equal((await f.call("/api/invite-links", { expiresAt: new Date(Date.now() + 31 * 86_400_000).toISOString() }, alice)).status, 400);
+  const created = await f.call("/api/invite-links", { expiresAt }, alice);
+  assert.equal(created.status, 201);
+  assert.match(created.value.url, /\/join#token=psl_[a-f0-9]{64}$/);
+  const info = await f.call("/api/auth/challenge", { token: created.value.token, kind: "invite" });
+  assert.equal(info.value.multiUse, true);
+  assert.equal(info.value.role, "member");
+  assert.equal(info.value.email, null);
+  const own = await f.call("/api/invite-links", undefined, alice);
+  assert.equal(own.value.links.length, 1);
+  assert.equal(own.value.links[0].useCount, 0);
+  assert(!JSON.stringify(own.value).includes(created.value.token));
+  assert(!JSON.stringify(own.value).includes("token_hash"));
+  assert.equal((await f.call("/api/invite-links", undefined, bob)).value.links.length, 0);
+  assert.equal((await f.call("/api/invite-links", undefined, admin)).value.links.length, 1);
+  assert.equal((await f.call("/api/auth/join", { token: created.value.token, name: "No email", password })).status, 400);
+  assert.equal((await f.call("/api/auth/join", { token: created.value.token, name: "Escalate", email: "bad@example.test", actorId: "bad", password, role: "admin" })).status, 400);
+  const joined = await Promise.all([
+    f.call("/api/auth/join", { token: created.value.token, name: "Charlie", email: "Charlie@Example.Test", actorId: "charlie", password }),
+    f.call("/api/auth/join", { token: created.value.token, name: "Dana", email: "dana@example.test", actorId: "dana", password }),
+  ]);
+  assert.deepEqual(joined.map((r) => r.status), [200, 200]);
+  assert.deepEqual(joined.map((r) => r.value.user.role), ["member", "member"]);
+  assert.equal(joined[0].value.user.email, "charlie@example.test");
+  assert.equal((await f.call("/api/invite-links", undefined, alice)).value.links[0].useCount, 2);
+  assert.equal((await f.call("/api/invite-links/revoke", { linkId: created.value.linkId }, bob)).status, 403);
+  assert.equal((await f.call("/api/invite-links/revoke", { linkId: created.value.linkId }, alice)).status, 200);
+  assert.equal((await f.call("/api/auth/challenge", { token: created.value.token, kind: "invite" })).status, 400);
+  assert.equal((await f.call("/api/auth/join", { token: created.value.token, name: "Later", email: "later@example.test", actorId: "later", password })).status, 400);
+});
+
+test("admins can revoke member links; expired and disabled-issuer links cannot be used", async (t) => {
+  const f = await fixture(t);
+  const admin = await f.firstAdmin();
+  const alice = await f.member(admin, "alice");
+  const make = () => f.call("/api/invite-links", { expiresAt: new Date(Date.now() + 86_400_000).toISOString() }, alice);
+  const expired = await make();
+  f.registry.db.prepare("UPDATE web_invite_links SET expires_at=? WHERE link_id=?")
+    .run("2000-01-01T00:00:00.000Z", expired.value.linkId);
+  assert.equal((await f.call("/api/auth/challenge", { token: expired.value.token, kind: "invite" })).status, 400);
+  const revoked = await make();
+  assert.equal((await f.call("/api/invite-links/revoke", { linkId: revoked.value.linkId }, admin)).status, 200);
+  assert.equal((await f.call("/api/auth/challenge", { token: revoked.value.token, kind: "invite" })).status, 400);
+  const disabled = await make();
+  f.auth.updateUser(admin.user, alice.user.userId, { disabled: true });
+  assert.equal((await f.call("/api/auth/challenge", { token: disabled.value.token, kind: "invite" })).status, 400);
+  assert.equal((await f.call("/api/invite-links", undefined, alice)).status, 401);
 });
 
 test("concurrent invitation redemption creates one account; issuer removal invalidates outstanding links", async (t) => {
@@ -867,13 +1063,28 @@ test("dashboard serves private metadata, separates demo data, exposes scores, an
   assert.match(instructions, /Never ask for my password/);
   assert(!/ps[bidrs]?_[a-f0-9]{64}/.test(instructions));
   for (const route of [
+    "/",
+    "/login",
+    "/setup",
+    "/join",
+    "/reset",
+    "/setups",
+    "/skills",
+    "/requests",
     "/people",
+    "/activity",
+    "/comparisons",
+    "/devices",
+    "/devices?connect=1",
+    "/team",
     `/setups/admin/review/${profile.revision}`,
   ]) {
     const page = await fetch(f.url + route);
     assert.equal(page.status, 200, route);
     assert.match(await page.text(), /<title>Loadout/);
   }
+  assert.equal((await fetch(f.url + "/missing-route")).status, 404);
+  assert.equal((await fetch(f.url + "/assets/missing.js")).status, 404);
   const html = await fetch(f.url + "/comparisons");
   assert.equal(html.status, 200);
   assert.match(
@@ -1024,6 +1235,7 @@ test("opening an existing registry upgrades account tables without losing v0.2 d
   registry.publish("legacy", profile, null);
   registry.putRuns("legacy", [record("legacy")]);
   for (const table of [
+    "web_invite_links",
     "web_sessions",
     "web_challenges",
     "web_device_tokens",

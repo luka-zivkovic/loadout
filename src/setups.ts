@@ -5,7 +5,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import { canonical, digest, jsonRead, jsonWrite, packFile, rejectSecrets, safePath, unpack, validateFiles, walk } from "./files.js";
 import { captureProfile, sealProfile, validateProfile } from "./profiles.js";
-import { id, nativeSetupBodySchema, nativeSetupSchema, setupHarness, setupSchema, type Harness, type NativeSetup, type Setup, type Skill } from "./schema.js";
+import { id, nativeSetupBodySchema, nativeSetupSchema, setupHarness, setupHarnessSchema, setupSchema, type SetupHarness, type NativeSetup, type Setup, type Skill } from "./schema.js";
 import { assertNoSymlinkAncestors, captureSkill, makeSkillPin, SkillMetadataError, validateSkillPins } from "./skills.js";
 import type { Store } from "./store.js";
 
@@ -14,8 +14,8 @@ const keys: Record<"claude-code" | "codex", string[]> = {
   codex: ["model", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "personality", "developer_instructions", "approval_policy", "sandbox_mode", "web_search", "hooks", "features"],
 };
 const DEFAULT_NATIVE_REVIEW = "Review the requested change in the current local project. Follow its project instructions and trace the affected behavior. Report actionable defects with file and line references, impact, and evidence. Do not modify files. Keep the code and review output local.";
-export const nativeAgentDir = (h: Harness) => h === "pi" ? process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi/agent") : h === "claude-code" ? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude") : process.env.CODEX_HOME ?? join(homedir(), ".codex");
-export function detectedVersion(harness: Harness): string {
+export const nativeAgentDir = (h: SetupHarness) => h === "pi" ? process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi/agent") : h === "claude-code" ? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude") : process.env.CODEX_HOME ?? join(homedir(), ".codex");
+export function detectedVersion(harness: SetupHarness): string {
   try { const value = execFileSync(harness === "claude-code" ? "claude" : harness, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }); return /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/.exec(value)?.[0] ?? "unknown"; }
   catch { return "unknown"; }
 }
@@ -99,7 +99,8 @@ export function addSkillToSetup(setup: Setup, skill: Skill): Setup {
   const { revision, ...body } = setup;
   return body.schemaVersion === 1 ? sealProfile({ ...body, files, skillPins, resources: { ...body.resources, skills: resources.skills } }) : sealNativeSetup({ ...body, files, skillPins, resources: { ...body.resources, skills: resources.skills } });
 }
-export function captureSetup(options: { name: string; scope: "work" | "personal"; harness: Harness; agentDir?: string; project?: string; workflowId?: string; prompt?: string; model?: string; version?: string }): Setup {
+export function captureSetup(options: { name: string; scope: "work" | "personal"; harness: SetupHarness; agentDir?: string; project?: string; workflowId?: string; prompt?: string; model?: string; version?: string }): Setup {
+  setupHarnessSchema.parse(options.harness);
   if (options.harness === "pi") return captureProfile({ ...options, agentDir: options.agentDir ?? nativeAgentDir("pi") });
   const harness = options.harness; const root = resolve(options.agentDir ?? nativeAgentDir(harness));
   if (!existsSync(root)) throw new Error(`Harness directory does not exist: ${root}`);
