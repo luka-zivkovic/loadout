@@ -56,6 +56,14 @@ export const settingsSchema = z
       .strict()
       .optional(),
     enableSkillCommands: z.boolean().optional(),
+    // Exact Pi built-in extension overrides are safe to share; extension paths
+    // and selection globs are captured separately or rejected.
+    extensions: z.array(z.enum([
+      "+builtin:mcp", "-builtin:mcp",
+      "+builtin:llama.cpp", "-builtin:llama.cpp",
+      "+builtin:codemode", "-builtin:codemode",
+      "+builtin:tool-search", "-builtin:tool-search",
+    ])).max(4).optional(),
   })
   .strict();
 
@@ -67,12 +75,16 @@ export const fileSchema = z
     executable: z.literal(true).optional(),
   })
   .strict();
-export const harnessSchema = z.enum(["pi", "claude-code", "codex"]);
+export const harnessSchema = z.enum(["pi", "claude-code", "codex", "cursor", "opencode"]);
 export type Harness = z.infer<typeof harnessSchema>;
+export const setupHarnessSchema = z.enum(["pi", "claude-code", "codex"]);
+export type SetupHarness = z.infer<typeof setupHarnessSchema>;
 export const harnessLabels: Record<Harness, string> = {
   pi: "Pi",
   "claude-code": "Claude Code",
   codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
 };
 export const skillBodySchema = z
   .object({
@@ -81,7 +93,7 @@ export const skillBodySchema = z
     name: id,
     scope,
     description: z.string().min(1).max(2000),
-    compatibleWith: z.array(harnessSchema).min(1).max(3),
+    compatibleWith: z.array(harnessSchema).min(1).max(harnessSchema.options.length),
     requirements: z.array(z.string().min(1).max(300)).max(100),
     files: z.array(fileSchema).min(1).max(3000),
   })
@@ -164,7 +176,7 @@ export const nativeSetupSchema = nativeSetupBodySchema
 export const setupSchema = z.union([profileSchema, nativeSetupSchema]);
 export type NativeSetup = z.infer<typeof nativeSetupSchema>;
 export type Setup = z.infer<typeof setupSchema>;
-export const setupHarness = (s: Setup): Harness =>
+export const setupHarness = (s: Setup): SetupHarness =>
   s.schemaVersion === 1 ? "pi" : s.harness.kind;
 export const setupVersion = (s: Setup): string =>
   s.schemaVersion === 1 ? s.piVersion : s.harness.version;
@@ -187,7 +199,7 @@ export const metricsSchema = z
     toolPolicy: z.enum(["profile", "read-only"]),
     piVersion: z.literal(PI_VERSION).optional(),
     harness: z
-      .object({ kind: harnessSchema, version: z.string().min(1).max(80) })
+      .object({ kind: setupHarnessSchema, version: z.string().min(1).max(80) })
       .strict()
       .optional(),
     coverage: z

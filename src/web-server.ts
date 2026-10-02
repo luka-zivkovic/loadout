@@ -95,12 +95,27 @@ function cookie(value: string, secure: boolean, clear = false) {
   return `pi_share_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${clear ? 0 : 604800}${secure ? "; Secure" : ""}`;
 }
 export function registrationInstructions(registry: Registry, origin: string) {
-  return `Connect my local Pi, Claude Code, or Codex harness to Loadout (${registry.metadata.teamName}).\n\n1. Use the locally installed loadout CLI. If it is missing, ask me for the Loadout repository location and run the commands below with node /path/to/pi-share/dist/cli.js instead of loadout. Do not install a similarly named package from a public registry.\n2. Run:\n   loadout team login ${registry.metadata.teamName} --scope ${registry.metadata.scope} --url ${origin}\n3. Show me the device code and browser approval link. Wait for me to sign in and approve the matching device code. Never ask for my password or approve the device for me.\n4. After approval, run:\n   loadout team status ${registry.metadata.teamName} --scope ${registry.metadata.scope}\n5. Report the connected team, member, and device status. Do not capture, publish, or sync existing data until I explicitly choose to do so.\n\nThis instruction contains no access credential. Account registration requires a separate admin invitation.\n\n${sharingDisclosureText()}\n`;
+  return `Help me connect my local Pi, Claude Code, or Codex harness to Loadout (${registry.metadata.teamName}) and share one setup snapshot.
+
+1. Use the locally installed loadout CLI. If it is missing, ask me for the Loadout repository location and run the commands below with node /path/to/pi-share/dist/cli.js instead of loadout. Do not install a similarly named package from a public registry.
+2. Run:
+   loadout team login ${registry.metadata.teamName} --scope ${registry.metadata.scope} --url ${origin}
+3. Show me the device code and browser approval link. Wait for me to sign in and approve the matching device code. Never ask for my password or approve the device for me.
+4. After approval, run:
+   loadout team status ${registry.metadata.teamName} --scope ${registry.metadata.scope}
+5. Ask which harness setup I want to share and whether to include the current project. Capture it once with loadout setup capture NAME --harness HARNESS --scope ${registry.metadata.scope}, replacing HARNESS with pi, claude-code, or codex and adding --project DIR only if I choose that folder. Inspect it with loadout setup inspect NAME --scope ${registry.metadata.scope}.
+6. Show me the included files and contents, settings, omitted settings, executable resources, and requirements. Explain that publishing makes the snapshot visible to workspace members. Publish only after I approve this exact revision, using loadout team publish ${registry.metadata.teamName} NAME --scope ${registry.metadata.scope} --reviewed-revision FULL_REVISION.
+7. Report the published revision. Do not start usage collection or continuous sync; those are separate, optional actions. Future setup changes stay local until I choose to capture and publish again.
+
+This instruction contains no access credential. Account registration requires a separate team invitation link.
+
+${sharingDisclosureText()}
+`;
 }
 
 export function createWebHandler(
   registry: Registry,
-  options: { origin: () => string; webRoot: string; trustedProxies?: string[] },
+  options: { origin: () => string; webRoot: string; trustedProxies?: string[]; setupEmail?: string },
 ) {
   const auth = new WebAuth(registry);
   return async (
@@ -207,14 +222,15 @@ export function createWebHandler(
           return true;
         }
         let result;
-        if (path === "/api/auth/setup")
-          result = await auth.setup(
-            personSchema
+        if (path === "/api/auth/setup") {
+          const input = personSchema
               .extend({ token: shortToken, password: passwordSchema })
               .strict()
-              .parse(raw),
-          );
-        else if (path === "/api/auth/login") {
+              .parse(raw);
+          if (options.setupEmail && input.email !== options.setupEmail)
+            throw new TeamError(403, "setup_email", "Use the designated first admin email.");
+          result = await auth.setup(input);
+        } else if (path === "/api/auth/login") {
           const input = z
             .object({ email: emailSchema, password: passwordSchema })
             .strict()
@@ -227,6 +243,8 @@ export function createWebHandler(
                 token: shortToken,
                 name: z.string().min(1).max(100),
                 password: passwordSchema,
+                email: emailSchema.optional(),
+                actorId: id.optional(),
               })
               .strict()
               .parse(raw),
@@ -407,6 +425,27 @@ export function createWebHandler(
         json(res, 200, { ok: true });
         return true;
       }
+      if (path === "/api/invite-links") {
+        if (req.method === "GET") {
+          json(res, 200, { links: auth.inviteLinks(session.user) });
+          return true;
+        }
+        if (req.method === "POST") {
+          auth.rateLimit(`invite-links:${session.user.userId}`, 20, 86_400_000);
+          const input = z.object({ expiresAt: z.iso.datetime() }).strict().parse(inputBody);
+          const link = auth.createInviteLink(session.user, input.expiresAt);
+          registry.ops.audit(session.user.actorId, "invitation.link.created", link.linkId);
+          json(res, 201, { ...link, url: `${origin}/join#token=${link.token}` });
+          return true;
+        }
+      }
+      if (req.method === "POST" && path === "/api/invite-links/revoke") {
+        const input = z.object({ linkId: z.uuid() }).strict().parse(inputBody);
+        auth.revokeInviteLink(session.user, input.linkId);
+        registry.ops.audit(session.user.actorId, "invitation.link.revoked", input.linkId);
+        json(res, 200, { ok: true });
+        return true;
+      }
       if (path.startsWith("/api/admin/")) {
         auth.requireAdmin(session.user);
         if (req.method === "GET" && path === "/api/admin/team") {
@@ -499,6 +538,7 @@ export function createWebHandler(
       "/reset",
       "/setups",
       "/skills",
+      "/requests",
       "/people",
       "/activity",
       "/comparisons",

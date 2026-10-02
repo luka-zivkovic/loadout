@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "loadout-team-pre-release",
+  "main": "cloudflare/worker.ts",
+  "account_id": "4e1406ff43c7bea50084bec685765b10",
+  "compatibility_date": "2026-10-02",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./web/dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "REGISTRY", "class_name": "LoadoutRegistry" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["LoadoutRegistry"] }
+  ],
+  "vars": {
+    "TEAM_NAME": "loadout",
+    "TEAM_SCOPE": "work",
+    "FIRST_ADMIN_EMAIL": "luka.zivkovic@n8n.io",
+    "PUBLIC_ORIGIN": "https://loadout-team-pre-release.n8n-maintenance.workers.dev"
+  }
+}

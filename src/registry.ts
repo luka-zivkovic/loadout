@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { chmodSync, existsSync } from "node:fs";
 import {
   createServer,
@@ -38,6 +39,7 @@ import { migrateWebAuth } from "./web-auth.js";
 import { createWebHandler, publicOrigin } from "./web-server.js";
 import { Operations, artifactRef, deviceStatusSchema } from "./operations.js";
 import { trustedProxyAddresses } from "./proxy.js";
+import { sqlTransaction } from "./sql-transaction.js";
 
 const metadataSchema = z
   .object({
@@ -51,6 +53,7 @@ type RegistryMetadata = z.infer<typeof metadataSchema>;
 const failure = (status: number, code: string, message: string): never => {
   throw new TeamError(status, code, message);
 };
+const artifactChunkChars = 400_000;
 
 /** A single registry is one team and one scope. All mutations and change cursors commit together. */
 export class Registry {
@@ -60,6 +63,7 @@ export class Registry {
   constructor(
     data: string,
     init?: { teamName: string; scope: "personal" | "work" },
+    cloudDatabase?: DatabaseSync,
   ) {
     const initialMetadata = init
       ? metadataSchema.parse({
@@ -68,18 +72,25 @@ export class Registry {
           ...init,
         })
       : undefined;
-    const root = resolve(data);
-    const path = join(root, "registry.sqlite");
-    if (init && existsSync(path)) throw new Error("Registry already exists");
-    if (!init && !existsSync(path))
-      throw new Error("Initialize this registry first");
-    ensureDir(root);
-    this.db = new DatabaseSync(path, { timeout: 5000 });
-    chmodSync(path, 0o600);
-    this.db.exec(
-      "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
-    );
-    if (init) {
+    let create = Boolean(init);
+    if (cloudDatabase) {
+      this.db = cloudDatabase;
+      create = !this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'").get();
+      if (create && !init) throw new Error("Initialize this registry first");
+    } else {
+      const root = resolve(data);
+      const path = join(root, "registry.sqlite");
+      if (init && existsSync(path)) throw new Error("Registry already exists");
+      if (!init && !existsSync(path))
+        throw new Error("Initialize this registry first");
+      ensureDir(root);
+      this.db = new DatabaseSync(path, { timeout: 5000 });
+      chmodSync(path, 0o600);
+      this.db.exec(
+        "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
+      );
+    }
+    if (create) {
       this.db.exec(`
         CREATE TABLE metadata (value TEXT NOT NULL);
         CREATE TABLE tokens (token_id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, actor_id TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, revoked_at TEXT);
@@ -103,22 +114,47 @@ export class Registry {
     this.db
       .exec(`CREATE TABLE IF NOT EXISTS skill_blobs (revision TEXT PRIMARY KEY, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS skill_revisions (owner TEXT NOT NULL, name TEXT NOT NULL, revision TEXT NOT NULL REFERENCES skill_blobs(revision), published_at TEXT NOT NULL, PRIMARY KEY(owner,name,revision));
-      CREATE TABLE IF NOT EXISTS skill_heads (owner TEXT NOT NULL, name TEXT NOT NULL, revision TEXT NOT NULL REFERENCES skill_blobs(revision), PRIMARY KEY(owner,name));`);
+      CREATE TABLE IF NOT EXISTS skill_heads (owner TEXT NOT NULL, name TEXT NOT NULL, revision TEXT NOT NULL REFERENCES skill_blobs(revision), PRIMARY KEY(owner,name));
+      CREATE TABLE IF NOT EXISTS artifact_chunks (kind TEXT NOT NULL, revision TEXT NOT NULL, part INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(kind,revision,part));`);
     this.ops = new Operations(this);
   }
   close() {
     this.db.close();
   }
   transaction<T>(fn: () => T): T {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      const result = fn();
-      this.db.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
+    return sqlTransaction(this.db, fn);
+  }
+  private storeArtifact(kind: "profile" | "skill", revision: string, body: string) {
+    const table = kind === "profile" ? "blobs" : "skill_blobs";
+    if (this.db.prepare(`SELECT 1 FROM ${table} WHERE revision=?`).get(revision)) return;
+    const chunked = body.length > artifactChunkChars;
+    this.db.prepare(`INSERT INTO ${table}(revision,body) VALUES(?,?)`)
+      .run(revision, chunked ? "" : body);
+    if (chunked) {
+      const insert = this.db.prepare(
+        "INSERT INTO artifact_chunks(kind,revision,part,body) VALUES(?,?,?,?)",
+      );
+      for (let start = 0, part = 0; start < body.length; part++) {
+        let end = Math.min(start + artifactChunkChars, body.length);
+        const last = body.charCodeAt(end - 1);
+        if (end < body.length && last >= 0xd800 && last <= 0xdbff) end--;
+        insert.run(kind, revision, part, body.slice(start, end));
+        start = end;
+      }
     }
+  }
+  artifactBody(kind: "profile" | "skill", revision: string): string {
+    const table = kind === "profile" ? "blobs" : "skill_blobs";
+    const row = this.db.prepare(`SELECT body FROM ${table} WHERE revision=?`).get(revision);
+    if (!row) return failure(404, "not_found", "This artifact revision does not exist");
+    const body = String(row.body);
+    if (body) return body;
+    const parts = this.db.prepare(
+      "SELECT part,body FROM artifact_chunks WHERE kind=? AND revision=? ORDER BY part",
+    ).all(kind, revision);
+    if (!parts.length || parts.some((part, index) => Number(part.part) !== index))
+      throw new Error("Artifact payload is incomplete");
+    return parts.map((part) => String(part.body)).join("");
   }
   private change(kind: string, body: unknown) {
     this.db
@@ -240,9 +276,7 @@ export class Registry {
         );
       this.ops.checkQuota(Buffer.byteLength(canonical(profile)));
       const now = new Date().toISOString();
-      this.db
-        .prepare("INSERT OR IGNORE INTO blobs(revision,body) VALUES(?,?)")
-        .run(profile.revision, canonical(profile));
+      this.storeArtifact("profile", profile.revision, canonical(profile));
       this.db
         .prepare(
           "INSERT OR IGNORE INTO profile_revisions(owner,name,revision,published_at) VALUES(?,?,?,?)",
@@ -300,12 +334,12 @@ export class Registry {
     this.ops.assertAvailable("profile", owner, name, revision);
     const row = this.db
       .prepare(
-        "SELECT b.body FROM profile_revisions r JOIN blobs b ON r.revision=b.revision WHERE r.owner=? AND r.name=? AND r.revision=?",
+        "SELECT 1 FROM profile_revisions WHERE owner=? AND name=? AND revision=?",
       )
       .get(owner, name, revision);
     if (!row)
       return failure(404, "not_found", "This setup revision does not exist");
-    return validateSetup(JSON.parse(String(row.body)));
+    return validateSetup(JSON.parse(this.artifactBody("profile", revision)));
   }
   publishSkill(actor: string, raw: Skill, expectedRevision: string | null) {
     const skill = validateSkill(raw);
@@ -331,9 +365,7 @@ export class Registry {
         );
       this.ops.checkQuota(Buffer.byteLength(canonical(skill)));
       const now = new Date().toISOString();
-      this.db
-        .prepare("INSERT OR IGNORE INTO skill_blobs(revision,body) VALUES(?,?)")
-        .run(skill.revision, canonical(skill));
+      this.storeArtifact("skill", skill.revision, canonical(skill));
       this.db
         .prepare(
           "INSERT OR IGNORE INTO skill_revisions(owner,name,revision,published_at) VALUES(?,?,?,?)",
@@ -368,12 +400,12 @@ export class Registry {
     this.ops.assertAvailable("skill", owner, name, revision);
     const row = this.db
       .prepare(
-        "SELECT b.body FROM skill_revisions r JOIN skill_blobs b ON r.revision=b.revision WHERE r.owner=? AND r.name=? AND r.revision=?",
+        "SELECT 1 FROM skill_revisions WHERE owner=? AND name=? AND revision=?",
       )
       .get(owner, name, revision);
     if (!row)
       return failure(404, "not_found", "This skill revision does not exist");
-    return validateSkill(JSON.parse(String(row.body)));
+    return validateSkill(JSON.parse(this.artifactBody("skill", revision)));
   }
   putRuns(actor: string, records: Metrics[]) {
     return this.transaction(() => {
@@ -548,24 +580,17 @@ function send(res: ServerResponse, status: number, value: unknown) {
   });
   res.end(JSON.stringify(value));
 }
-export async function serveRegistry(
+export function createRegistryRequestHandler(
   registry: Registry,
   options: {
-    host?: string;
-    port?: number;
-    publicUrl?: string;
-    webRoot?: string;
+    origin: () => string;
+    webRoot: string;
     trustedProxies?: string[];
-  } = {},
+    setupEmail?: string;
+  },
 ) {
-  let origin = options.publicUrl ? publicOrigin(options.publicUrl) : "";
-  const web = createWebHandler(registry, {
-    origin: () => origin,
-    webRoot:
-      options.webRoot ?? fileURLToPath(new URL("../web/dist", import.meta.url)),
-    trustedProxies: trustedProxyAddresses(options.trustedProxies),
-  });
-  const server = createServer(async (req, res) => {
+  const web = createWebHandler(registry, options);
+  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       if (await web(req, res)) return;
       if (req.headers.origin)
@@ -783,16 +808,39 @@ export async function serveRegistry(
           message: "Request could not be accepted",
         });
     }
+  };
+}
+
+export async function serveRegistry(
+  registry: Registry,
+  options: {
+    host?: string;
+    port?: number;
+    publicUrl?: string;
+    webRoot?: string;
+    trustedProxies?: string[];
+    setupEmail?: string;
+  } = {},
+) {
+  let origin = options.publicUrl ? publicOrigin(options.publicUrl) : "";
+  const handler = createRegistryRequestHandler(registry, {
+    origin: () => origin,
+    webRoot:
+      options.webRoot ?? fileURLToPath(new URL("../web/dist", import.meta.url)),
+    trustedProxies: trustedProxyAddresses(options.trustedProxies),
+    setupEmail: options.setupEmail,
   });
+  const server = createServer(handler);
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
   server.maxRequestsPerSocket = 100;
   await new Promise<void>((done, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 4318, options.host ?? "127.0.0.1", () => {
+    const ready = () => {
       server.removeListener("error", reject);
       done();
-    });
+    };
+    server.listen(options.port ?? 4318, options.host ?? "127.0.0.1", ready);
   });
   const address = server.address();
   if (!address || typeof address === "string")

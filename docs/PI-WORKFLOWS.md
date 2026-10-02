@@ -42,7 +42,7 @@ Capture defaults to `PI_CODING_AGENT_DIR` or `~/.pi/agent`; `--agent-dir` select
 
 Credentials, `models.json`, session history, memory directories, `.git`, and `node_modules` are excluded from capture. Common credential filenames and embedded token patterns are rejected. This check is best effort: profile files and the reusable workflow request are intentionally shared content, and may contain your own proprietary instructions.
 
-Unpinned packages, package filtering objects, resource selection globs, and symlinks are rejected rather than silently changing the setup. Package references must look like `npm:@team/review@1.2.3` or `git:github.com/team/review@<40-character-commit>`. A project's declaration replaces the same global package's version. Loose extensions with external dependencies may require conversion into a pinned Pi package; the prototype does not restore their local `node_modules`.
+Unpinned packages, package filtering objects, resource selection globs, and symlinks are rejected rather than silently changing the setup. Exact Pi built-in extension switches such as `-builtin:mcp` are captured in settings; a project switch overrides the global one. Package references must look like `npm:@team/review@1.2.3` or `git:github.com/team/review@<40-character-commit>`. A project's declaration replaces the same global package's version. Loose extensions with external dependencies may require conversion into a pinned Pi package; the prototype does not restore their local `node_modules`.
 
 ## Compare on the same context
 

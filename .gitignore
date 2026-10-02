@@ -3,6 +3,8 @@ dist/
 .pi-share/
 .demo/
 .registry/
+.dev.vars
+.wrangler/
 *.credential.json
 
 /web/dist/

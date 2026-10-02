@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
+import { Buffer } from "node:buffer";
 import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { digest } from "./files.js";
@@ -6,6 +7,7 @@ import { id } from "./schema.js";
 import { TeamError } from "./team-protocol.js";
 import type { Registry } from "./registry.js";
 import type { SecretPrefix } from "./secrets.js";
+import { sqlTransaction } from "./sql-transaction.js";
 
 export const roleSchema = z.enum(["admin", "member"]);
 export const passwordSchema = z.string().min(12).max(256);
@@ -78,6 +80,12 @@ export function migrateWebAuth(db: DatabaseSync) {
       created_by TEXT REFERENCES web_users(user_id), created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
       consumed_at TEXT, revoked_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS web_invite_links (
+      link_id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE,
+      created_by TEXT NOT NULL REFERENCES web_users(user_id), created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL, revoked_at TEXT, use_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_web_invite_links_creator ON web_invite_links(created_by,created_at);
     CREATE TABLE IF NOT EXISTS web_device_requests (
       request_id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL UNIQUE, user_code TEXT NOT NULL UNIQUE,
       label TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, last_poll_at INTEGER,
@@ -147,15 +155,7 @@ export class WebAuth {
     this.db = registry.db;
   }
   private tx<T>(fn: () => T): T {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      const value = fn();
-      this.db.exec("COMMIT");
-      return value;
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+    return sqlTransaction(this.db, fn);
   }
   setupRequired() {
     return (
@@ -360,13 +360,38 @@ export class WebAuth {
     if (row.created_by) this.requireAdmin(this.user(String(row.created_by)));
     return row;
   }
+  private inviteLink(secret: string) {
+    if (!/^psl_[a-f0-9]{64}$/.test(secret))
+      return deny(400, "invalid_link", "This link is invalid, expired, or revoked.");
+    const row = this.db
+      .prepare(
+        `SELECT l.* FROM web_invite_links l
+         JOIN web_users creator ON creator.user_id=l.created_by AND creator.disabled_at IS NULL
+         WHERE l.token_hash=? AND l.revoked_at IS NULL AND l.expires_at>?`,
+      )
+      .get(digest(secret), now());
+    if (!row)
+      return deny(400, "invalid_link", "This link is invalid, expired, or revoked.");
+    return row;
+  }
   challengeInfo(secret: string, kind: "invite" | "reset") {
+    if (kind === "invite" && secret.startsWith("psl_")) {
+      const link = this.inviteLink(secret);
+      return {
+        email: null,
+        actorId: null,
+        role: "member",
+        expiresAt: String(link.expires_at),
+        multiUse: true,
+      };
+    }
     const row = this.challenge(secret, kind);
     return {
       email: String(row.email),
       actorId: row.actor_id,
       role: row.role,
       expiresAt: String(row.expires_at),
+      multiUse: false,
     };
   }
   async setup(
@@ -482,31 +507,80 @@ export class WebAuth {
       )
       .run(now(), challengeId);
   }
-  async join(input: { token: string; name: string; password: string }) {
-    this.challenge(input.token, "invite");
+  createInviteLink(user: WebUser, expiresAt: string) {
+    z.iso.datetime().parse(expiresAt);
+    const expiry = Date.parse(expiresAt);
+    if (expiry < Date.now() + 5 * 60_000 || expiry > Date.now() + 30 * 86_400_000)
+      return deny(400, "invalid_expiry", "Choose an expiry between 5 minutes and 30 days from now.");
+    const canonicalExpiry = new Date(expiry).toISOString();
+    const secret = token("psl");
+    const linkId = randomUUID();
+    return this.tx(() => {
+      this.user(user.userId);
+      const active = Number(this.db.prepare(
+        "SELECT COUNT(*) AS n FROM web_invite_links WHERE created_by=? AND revoked_at IS NULL AND expires_at>?",
+      ).get(user.userId, now())!.n);
+      if (active >= 20)
+        return deny(409, "invite_link_limit", "Revoke an unused link before creating another.");
+      this.db.prepare(
+        "INSERT INTO web_invite_links(link_id,token_hash,created_by,created_at,expires_at) VALUES(?,?,?,?,?)",
+      ).run(linkId, digest(secret), user.userId, now(), canonicalExpiry);
+      return { linkId, token: secret, expiresAt: canonicalExpiry };
+    });
+  }
+  inviteLinks(user: WebUser) {
+    const current = this.user(user.userId);
+    return this.db.prepare(
+      `SELECT l.link_id AS linkId,l.created_at AS createdAt,l.expires_at AS expiresAt,
+        l.revoked_at AS revokedAt,l.use_count AS useCount,
+        creator.actor_id AS createdBy
+       FROM web_invite_links l JOIN web_users creator ON creator.user_id=l.created_by
+       WHERE (?='admin' OR l.created_by=?) ORDER BY l.created_at DESC`,
+    ).all(current.role, current.userId);
+  }
+  revokeInviteLink(user: WebUser, linkId: string) {
+    const current = this.user(user.userId);
+    z.uuid().parse(linkId);
+    const link = this.db.prepare("SELECT created_by FROM web_invite_links WHERE link_id=?").get(linkId);
+    if (!link) return deny(404, "not_found", "Invitation link not found.");
+    if (current.role !== "admin" && link.created_by !== current.userId)
+      return deny(403, "owner_required", "You can revoke only your own invitation links.");
+    this.db.prepare("UPDATE web_invite_links SET revoked_at=? WHERE link_id=? AND revoked_at IS NULL").run(now(), linkId);
+  }
+  async join(input: { token: string; name: string; password: string; email?: string; actorId?: string }) {
+    const multiUse = input.token.startsWith("psl_");
+    if (multiUse) this.inviteLink(input.token);
+    else this.challenge(input.token, "invite");
     const name = z.string().trim().min(1).max(100).parse(input.name);
+    const email = multiUse ? emailSchema.parse(input.email) : undefined;
+    const actorId = multiUse ? id.parse(input.actorId) : undefined;
     const encoded = await passwordHash(input.password);
     return this.tx(() => {
-      const c = this.challenge(input.token, "invite");
+      const c = multiUse ? this.inviteLink(input.token) : this.challenge(input.token, "invite");
+      const accountEmail = multiUse ? email! : String(c.email);
+      const accountActorId = multiUse ? actorId! : String(c.actor_id);
       const userId = randomUUID();
       if (
         this.db
           .prepare("SELECT 1 FROM web_users WHERE email=? OR actor_id=?")
-          .get(c.email!, c.actor_id!)
+          .get(accountEmail, accountActorId)
       )
         return deny(
           409,
           "account_exists",
-          "This account already exists. Sign in instead.",
+          "This email or member handle is already in use. Sign in or choose another handle.",
         );
       this.db
         .prepare(
           "INSERT INTO web_users(user_id,actor_id,email,name,password_hash,role,created_at) VALUES(?,?,?,?,?,?,?)",
         )
-        .run(userId, c.actor_id!, c.email!, name, encoded, c.role!, now());
-      this.db
-        .prepare("UPDATE web_challenges SET consumed_at=? WHERE challenge_id=?")
-        .run(now(), String(c.challenge_id));
+        .run(userId, accountActorId, accountEmail, name, encoded, multiUse ? "member" : String(c.role), now());
+      if (multiUse)
+        this.db.prepare("UPDATE web_invite_links SET use_count=use_count+1 WHERE link_id=?")
+          .run(String(c.link_id));
+      else
+        this.db.prepare("UPDATE web_challenges SET consumed_at=? WHERE challenge_id=?")
+          .run(now(), String(c.challenge_id));
       return this.newSession(userId);
     });
   }
@@ -600,6 +674,9 @@ export class WebAuth {
           )
           .run(now(), target.userId);
       }
+      if (input.disabled)
+        this.db.prepare("UPDATE web_invite_links SET revoked_at=? WHERE created_by=? AND revoked_at IS NULL")
+          .run(now(), target.userId);
     });
   }
   beginDevice(label: string) {

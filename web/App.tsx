@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Lightbulb,
   Users,
 } from "lucide-react";
 import {
@@ -39,16 +40,18 @@ import { registerDashboardTools } from "./agent-tools";
 import { SharingLink } from "./Sharing";
 import { Setups, SetupPage, Skills } from "./Library";
 import loadoutMark from "./assets/loadout.svg";
-import { harnessLabels } from "../src/schema";
+import { harnessLabels, setupHarnessSchema } from "../src/schema";
 import { ActivityView, Comparisons, Devices, TeamAccess } from "./Views";
 import { People } from "./People";
+import { Requests } from "./Requests";
 import { hasComparableSetups } from "../src/onboarding";
 
 const routes = [
   { path: "/", label: "Overview", icon: BarChart3 },
   { path: "/setups", label: "Shared setups", icon: Layers },
   { path: "/skills", label: "Shared skills", icon: Sparkles },
-  { path: "/people", label: "People", icon: Users, hidden: true },
+  { path: "/requests", label: "Skill requests", icon: Lightbulb },
+  { path: "/people", label: "People", icon: Users },
   { path: "/activity", label: "Activity", icon: Activity },
   { path: "/comparisons", label: "Comparisons", icon: GitCompareArrows },
   { path: "/devices", label: "My devices", icon: Monitor },
@@ -56,7 +59,7 @@ const routes = [
 ];
 const navigationGroups = [
   { label: "", paths: ["/"] },
-  { label: "Library", paths: ["/setups", "/skills"] },
+  { label: "Library", paths: ["/setups", "/skills", "/requests"] },
   { label: "Evidence", paths: ["/activity", "/comparisons"] },
   { label: "Workspace", paths: ["/people", "/devices", "/team"] },
 ];
@@ -82,12 +85,10 @@ function Brand() {
 
 function Navigation({
   path,
-  admin,
   comparisonAvailable,
   navigate,
 }: {
   path: string;
-  admin: boolean;
   comparisonAvailable: boolean;
   navigate: (path: string) => void;
 }) {
@@ -97,8 +98,6 @@ function Navigation({
         const items = routes.filter(
           (route) =>
             group.paths.includes(route.path) &&
-            (!route.hidden || route.path === path) &&
-            (route.path !== "/team" || admin) &&
             (route.path !== "/comparisons" ||
               comparisonAvailable ||
               route.path === path),
@@ -153,19 +152,24 @@ function Auth({
           : "login";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [info, setInfo] = useState<{ email: string; role: string } | null>(
+  const [info, setInfo] = useState<{ email: string | null; role: string; expiresAt: string; multiUse: boolean } | null>(
     null,
   );
+  const [joinHandle, setJoinHandle] = useState("");
+  const [customJoinHandle, setCustomJoinHandle] = useState(false);
   const unavailable =
     (kind === "join" || kind === "reset") && Boolean(error) && !info;
   useEffect(() => {
-    if (kind === "join" || kind === "reset")
+    if (kind === "join" || kind === "reset") {
+      setInfo(null);
+      setError("");
       api("/auth/challenge", {
         token,
         kind: kind === "join" ? "invite" : "reset",
       })
         .then(setInfo)
         .catch((e) => setError(e.message));
+    }
   }, [kind, token]);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -237,11 +241,13 @@ function Auth({
           </h1>
           <p className="muted">
             {unavailable
-              ? "Ask your admin for a new link, or return to your workspace if you already have access."
+              ? "Ask a teammate for a new link, or return to your workspace if you already have access."
               : kind === "setup"
                 ? "Start your workspace, then invite your teammates."
                 : kind === "join"
-                  ? `Your invitation is for ${info?.email ?? "…"}. You choose your own password.`
+                  ? info?.multiUse
+                    ? `This link lets teammates join as members until ${date(info.expiresAt)}. Use your own email and choose a password.`
+                    : `Your invitation is for ${info?.email ?? "…"}. You choose your own password.`
                   : kind === "reset"
                     ? `Set a new password for ${info?.email ?? "your account"}. This also disconnects your devices.`
                     : "Your shared setups and team activity, in one place."}
@@ -275,11 +281,15 @@ function Auth({
                   />
                 </Field>
               )}
-              {(kind === "setup" || kind === "login") && (
+              {(kind === "setup" || kind === "login" || (kind === "join" && info?.multiUse)) && (
                 <Field label="Email address">
                   <input
                     name="email"
                     type="email"
+                    onChange={kind === "join" ? (e) => {
+                      if (!customJoinHandle)
+                        setJoinHandle(e.target.value.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "").replace(/^[^a-z0-9]+/, "").slice(0, 80));
+                    } : undefined}
                     required
                     maxLength={254}
                     autoComplete="username"
@@ -287,13 +297,15 @@ function Auth({
                   />
                 </Field>
               )}
-              {kind === "setup" && (
+              {(kind === "setup" || (kind === "join" && info?.multiUse)) && (
                 <Field
                   label="Member handle"
                   hint="Used to identify your setups and activity across devices."
                 >
                   <input
                     name="actorId"
+                    value={kind === "join" ? joinHandle : undefined}
+                    onChange={kind === "join" ? (e) => { setCustomJoinHandle(true); setJoinHandle(e.target.value); } : undefined}
                     required
                     pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{0,79}"
                     placeholder="e.g. alex"
@@ -344,8 +356,8 @@ function Auth({
           )}
           <p className="auth-foot">
             {kind === "login"
-              ? "New here or locked out? Ask your admin for an invitation or a password reset link."
-              : "Account access is managed by your team’s admins."}
+              ? "New here? Ask a teammate for a join link. For password resets, contact an admin."
+              : "Account access is managed by your team."}
           </p>
           <SharingLink />
         </div>
@@ -506,7 +518,6 @@ export default function App() {
         </div>
         <Navigation
           path={active.path}
-          admin={user.role === "admin"}
           comparisonAvailable={comparisonAvailable}
           navigate={navigate}
         />
@@ -583,6 +594,8 @@ export default function App() {
                       ? "Your team’s configurations. Versioned, inspectable, ready to run."
                     : active.path === "/skills"
                       ? "Borrow a useful skill. Keep the setup that works for you."
+                      : active.path === "/requests"
+                        ? "Suggest a skill, discuss the idea, and see who would use it."
                       : active.path === "/people"
                         ? "Find teammates by name, job title, or company team."
                         : active.path === "/activity"
@@ -591,7 +604,9 @@ export default function App() {
                           ? "Try a teammate’s setup locally, compare the evidence, and record what to keep."
                           : active.path === "/devices"
                             ? "Connect your harnesses without sharing account passwords."
-                            : "Invite teammates and manage who can access this workspace."}
+                            : active.path === "/team" && user.role === "member"
+                              ? "Invite teammates with links you can revoke any time."
+                              : "Invite teammates and manage who can access this workspace."}
               </p>
             </div>
             {!setupPage && ["/setups", "/skills"].includes(active.path) && data ? (
@@ -626,7 +641,7 @@ export default function App() {
             ) : null}
           </div>
           <ErrorBox error={error} />
-          {!["/people", "/devices", "/team", "/setups"].includes(active.path) && (
+          {!["/people", "/devices", "/team", "/setups", "/requests"].includes(active.path) && (
             <div className="toolbar">
               {mode === "demo" && (
                 <div className="demo-source">
@@ -653,9 +668,12 @@ export default function App() {
                     }}
                   >
                     <option value="">All harnesses</option>
-                    {Object.entries(harnessLabels).map(([key, label]) => (
+                    {harness && !setupHarnessSchema.options.includes(harness as (typeof setupHarnessSchema.options)[number]) && (
+                      <option value={harness}>Unavailable harness: {harness}</option>
+                    )}
+                    {setupHarnessSchema.options.map((key) => (
                       <option key={key} value={key}>
-                        {label}
+                        {harnessLabels[key]}
                       </option>
                     ))}
                   </select>
@@ -684,7 +702,7 @@ export default function App() {
             </div>
           )}
           {mode === "demo" &&
-            !["/people", "/devices", "/team"].includes(active.path) && (
+            !["/people", "/devices", "/team", "/requests"].includes(active.path) && (
             <div className="notice">
               Demo measurements are isolated from live activity. They do not
               indicate real model quality or spend.
@@ -702,14 +720,12 @@ export default function App() {
             )
           ) : active.path === "/people" ? (
             <People user={user} />
+          ) : active.path === "/requests" ? (
+            <Requests user={user} />
           ) : active.path === "/devices" ? (
             <Devices team={session.team} />
           ) : active.path === "/team" ? (
-            user.role === "admin" ? (
-              <TeamAccess user={user} />
-            ) : (
-              <ErrorBox error="Only admins can manage team access." />
-            )
+            <TeamAccess user={user} />
           ) : data ? (
             active.path === "/setups" ? (
               setupPage ? (
@@ -765,7 +781,6 @@ export default function App() {
             <div className="spaced">
               <Navigation
                 path={active.path}
-                admin={user.role === "admin"}
                 comparisonAvailable={comparisonAvailable}
                 navigate={navigate}
               />
@@ -929,19 +944,19 @@ function Overview({
             </div>
           ) : (
             <Empty
-              title="Your activity starts here"
+              title="Usage collection is optional"
               action={
                 <button
                   className="button secondary"
-                  onClick={() => navigate("/devices")}
+                  onClick={() => navigate("/devices?measure=1")}
                 >
-                  Connect your first harness
+                  Set up measurement
                   <ArrowRight size={15} />
                 </button>
               }
             >
-              Connect a device, then choose the setup and measurements you want
-              to share.
+              Share a setup without measuring activity. When you want usage
+              data, collect one workflow and sync its finalized metadata.
             </Empty>
           )}
           <details className="daily-values">

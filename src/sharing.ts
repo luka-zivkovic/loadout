@@ -12,6 +12,10 @@ export const sharingDisclosure = {
       body: "When synced: member and device IDs, harness and version, workflow/model/tool names, declared skill versions and observed skill names, timestamps, durations, available token counts and estimated spend, measurement coverage, and human assessment counts. Device reports include sync time, configuration-check counts/time, and collector state; source paths stay local. Named trials, their selected revisions and decisions, and skill usefulness feedback are shared with the workspace.",
     },
     {
+      title: "Skill requests",
+      body: "Requests, comments, and interest counts are visible to signed-in workspace members. You can hide your name from teammates on a request or comment; admins can identify authors for moderation. Keep task code, credentials, and repository paths out of posts.",
+    },
+    {
       title: "Stays local",
       body: "Loadout’s analytics sync does not upload conversations, task messages, tool arguments or outputs, repository files or diffs, frozen task context, or generated reviews.",
     },

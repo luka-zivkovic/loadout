@@ -2,7 +2,7 @@
 
 Loadout 0.4 serves its dashboard from the same Node server and SQLite registry as the CLI API. One installation is one team and one work/personal scope. Authentication does not depend on a cloud account or an email provider.
 
-The onboarding model combines **a host-issued first-admin link**, **admin-created invitations**, and **browser-approved device credentials**. Admins choose who can join and which role they receive. Each person chooses their own password; harnesses never need that password.
+The onboarding model combines **a host-issued first-admin link**, **team invitation links**, **admin-created individual invitations**, and **browser-approved device credentials**. Any active member can invite teammates as members with a reusable link. Admins can also invite a specific email and handle as a member or admin. Each person chooses their own password; harnesses never need that password.
 
 ## First installation
 
@@ -27,18 +27,27 @@ node dist/cli.js registry setup-link \
 
 Installation and password reset links put the secret in the URL fragment. It is removed from browser history after the page reads it and is sent only in the same-origin form request. If a page is reloaded before completing the form, reopen the original private link.
 
-## Invite a teammate
+## Invite teammates with one link
 
-1. Open **Team & access → Invite teammate**.
+1. Any signed-in member opens **Team & access → Create link**.
+2. Choose the exact expiry date and time, from 5 minutes to 30 days ahead.
+3. Copy the link and share it privately with teammates. The secret is shown only when the link is created.
+4. Each teammate opens the link, enters their name, email, unique member handle, and password, then joins as a member. The same link can be used by multiple people until it expires or is revoked.
+
+The creator or an admin can revoke an active link from **Team & access**. Members see the links they created; admins see all links, including how many accounts joined through each one. Disabling the creator revokes their links. The database stores only a hash of the secret, so a lost link cannot be displayed again; create a new one instead.
+
+## Invite one person as an admin
+
+1. Open **Team & access → Invite one person**.
 2. Set the recipient's email, stable member handle, and role. Use **Member** for ordinary team access.
 3. Copy the generated invitation link and share it privately with that recipient.
 4. They open it, enter their name and choose a password of at least 12 characters.
 
-Invitations expire after 7 days, can be revoked, and work once. The recipient cannot change the invited email, handle, or role. The raw link is displayed only when created; the database stores its hash. An invalid or consumed link offers a return to sign-in or the workspace. If you lose it, revoke the pending invitation and create another.
+Individual invitations expire after 7 days, can be revoked, and work once. The recipient cannot change the invited email, handle, or role. The raw link is displayed only when created; the database stores its hash. An invalid or consumed link offers a return to sign-in or the workspace. If you lose it, revoke the pending invitation and create another.
 
-Email is an account identifier here. Delivery is manual; Loadout does not verify mailbox ownership or send email. Possession of the invitation lets someone create that invited account, so deliver it through your existing private team channel. Public signup is disabled.
+Email is an account identifier here. Delivery is manual; Loadout does not verify mailbox ownership or send email. Anyone holding a reusable team link can create a member account, so share it through your existing private team channel. Individual invitation links grant the specified account. Public signup is disabled.
 
-Admins can invite members/admins, change roles, disable/re-enable accounts, and issue password reset links. At least one active admin must remain. Disabling an account revokes its sessions and all its device credentials, including v0.2 operator-issued credentials for the same handle. Re-enabling it does not reactivate old credentials. Demoting an admin also invalidates its sessions, device credentials, and unconsumed links it issued.
+Admins can invite members/admins individually, change roles, disable/re-enable accounts, and issue password reset links. At least one active admin must remain. Disabling an account revokes its sessions, team invitation links, and all its device credentials, including v0.2 operator-issued credentials for the same handle. Re-enabling it does not reactivate old credentials. Demoting an admin also invalidates its sessions, device credentials, and unconsumed individual invitations it issued.
 
 All active members can read shared configurations and measurements in this installation. They can also browse member names, handles, optional job titles, and optional company teams in **People**. Each member controls their own optional profile fields; account email and access controls remain admin-only. Setup publishing, run ownership, and reviewer identity are still enforced by the registry. Admin browser accounts and device credentials are separate: possessing a CLI token does not grant browser administration.
 
@@ -75,7 +84,7 @@ The flow is inspired by the [OAuth device authorization grant](https://www.rfc-e
 - **Activity:** server-paginated runs, visible search/member/workflow/harness filters, metadata coverage, stable run links, human assessments, and selection of 2–4 runs for inspection.
 - **Comparisons:** named setup trials, compatible revision selection (including the candidate's available history), local CLI instructions, full experiment results, assessments, and an explicit decision. Pi trials use one frozen packet; native trials remain usage observations.
 - **My devices:** authorization and last successful sync are separate. Source checks and collector state are reports at the last sync, not a live heartbeat. Connection instructions open on demand.
-- **Team & access:** admin-only member/invitation management, member devices, administrative events, payload quotas, and withdrawn-content retention/purge.
+- **Team & access:** every member can create and revoke their own team invitation links. Admins can manage all links, individual invitations, member accounts and devices, administrative events, payload quotas, and withdrawn-content retention/purge.
 
 The dashboard defaults to live activity. Demo measurements are separate. Period totals cover all matching runs in the selected 7, 30, or 90 days; Activity returns pages of 100. Experiment filters select groups, and an opened experiment includes all its runs even when some lie outside that period. Catalogue metadata is cached separately from file blobs. Configuration catalogues and named trials are independent of activity filters; skill detail states its own period/mode scope. Details and filters have stable URLs.
 

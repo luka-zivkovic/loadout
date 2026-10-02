@@ -5,7 +5,7 @@ import {
   id,
   metricsSchema,
   scope,
-  harnessSchema,
+  setupHarnessSchema,
   skillSchema,
 } from "./schema.js";
 
@@ -34,7 +34,7 @@ export const profileListingSchema = z
     model: z.string().max(301),
     piVersion: z.string().max(30).optional(),
     harness: z
-      .object({ kind: harnessSchema, version: z.string().max(80) })
+      .object({ kind: setupHarnessSchema, version: z.string().max(80) })
       .strict()
       .optional(),
     publishedAt: z.iso.datetime(),

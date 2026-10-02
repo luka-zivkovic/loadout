@@ -27,6 +27,7 @@ import { connectTeam, loginTeam, TeamClient } from "./team-client.js";
 import {
   scope as scopeSchema,
   harnessSchema,
+  setupHarnessSchema,
   harnessLabels,
   setupHarness,
   type Setup,
@@ -57,10 +58,10 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const help = `Loadout — shared skills, native harness setups, and metadata-only analytics
 
-  skill capture DIR [--compatible pi,claude-code,codex] [--requires TEXT]
+  skill capture DIR [--compatible pi,claude-code,codex,cursor,opencode] [--requires TEXT]
   skill list | show NAME | export NAME --out FILE | import FILE
-  skill install NAME --harness pi|claude-code|codex [--project DIR | --out DIR]
-  skill extract SETUP SKILL_NAME [--compatible pi,claude-code,codex]
+  skill install NAME --harness pi|claude-code|codex|cursor|opencode [--project DIR | --out DIR]
+  skill extract SETUP SKILL_NAME [--compatible pi,claude-code,codex,cursor,opencode]
   setup capture NAME --harness pi|claude-code|codex [--agent-dir DIR] [--project DIR]
   setup list | show NAME
   setup add-skill NAME SKILL [--as LOCAL_NAME]
@@ -736,7 +737,7 @@ async function main() {
       const options = {
         name: need(p[2], "NAME"),
         scope: store.scope,
-        harness: harnessSchema.parse(need(v.harness, "--harness")),
+        harness: setupHarnessSchema.parse(need(v.harness, "--harness")),
         agentDir: v["agent-dir"],
         project: v.project,
         workflowId: v.workflow,

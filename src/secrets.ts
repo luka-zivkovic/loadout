@@ -3,6 +3,7 @@ export const secretPrefixes = [
   "ps",
   "psb",
   "psi",
+  "psl",
   "psr",
   "pss",
   "psd",

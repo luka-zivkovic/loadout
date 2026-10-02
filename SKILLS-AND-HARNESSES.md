@@ -1,6 +1,6 @@
 # Shared skills and native harnesses
 
-Loadout supports a standalone skill library and native Pi, Claude Code, and Codex setup snapshots. A setup keeps its own configuration format; no full setup translation is attempted. Existing Pi profiles, registry contents, and analytics exports remain readable.
+Loadout supports a standalone skill library for Pi, Claude Code, Codex, Cursor, and OpenCode. Native setup snapshots and usage collection currently cover Pi, Claude Code, and Codex. A setup keeps its own configuration format; no full setup translation is attempted. Existing Pi profiles, registry contents, and analytics exports remain readable.
 
 The dashboard has **Shared skills**, a harness filter in **Shared setups**, and a harness filter for activity. Skill details include compatibility, requirements, exact revision, installation commands, setups pinning that revision, and measurements referencing it. The same skill can be pinned into multiple native setups.
 
@@ -15,7 +15,7 @@ loadout skill inspect review-skill --scope work
 loadout team publish-skill engineering review-skill --scope work
 ```
 
-The name and description come from `SKILL.md` frontmatter. The directory, supporting files, and executable bits are included. Compatibility is a publisher declaration, not an automated guarantee. Skills with harness-specific frontmatter require an explicit compatibility declaration. Plain standard skills default to all three harnesses. Use `--compatible claude-code` for a Claude-specific skill.
+The name and description come from `SKILL.md` frontmatter. The directory, supporting files, and executable bits are included. Compatibility is a publisher declaration, not an automated guarantee. Skills with harness-specific frontmatter require an explicit compatibility declaration. Plain standard skills continue to default to Pi, Claude Code, and Codex; opt in to Cursor and OpenCode after checking them with `--compatible cursor,opencode` (or include other verified harnesses). Cursor/OpenCode skill names must use lowercase words separated by single hyphens, up to 64 characters. OpenCode skill descriptions are limited to 1024 characters. Use `--compatible claude-code` for a Claude-specific skill.
 
 On another device:
 
@@ -26,7 +26,7 @@ loadout team pull-skill engineering alice/review-skill --scope work \
 loadout skill install colleague-review --harness codex --scope work --project .
 ```
 
-`--project .` installs into `.agents/skills/<name>` for Codex, `.claude/skills/<name>` for Claude Code, or `.pi/skills/<name>` for Pi. Without `--project`, installation uses the standard user skill directory. `--out` selects an exact new skill directory. Existing destinations are never overwritten. To upgrade, inspect and move/remove the old directory yourself, then install the chosen version.
+`--project .` installs into `.agents/skills/<name>` for Codex, Cursor, and OpenCode, `.claude/skills/<name>` for Claude Code, or `.pi/skills/<name>` for Pi. Without `--project`, installation uses the corresponding user skill directory. One `.agents/skills` copy can be discovered by all three compatible agents; it is one installation, not three copies. `--out` selects an exact new skill directory. Existing destinations are never overwritten. To upgrade, inspect and move/remove the old directory yourself, then install the chosen version.
 
 An installation receipt inside the skill directory preserves its compatibility and version metadata for later setup capture. Receipts are excluded from the shared bundle. Editing a supporting file and capturing again produces a new content revision; it does not change an existing published revision.
 

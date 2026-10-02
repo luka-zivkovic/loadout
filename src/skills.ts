@@ -19,6 +19,10 @@ export function skillFrontmatter(text: string): Record<string, unknown> {
 }
 export function sealSkill(raw: Omit<Skill, "revision">): Skill {
   const body = skillBodySchema.parse(raw); validateFiles(body.files);
+  if (body.compatibleWith.some(h => h === "cursor" || h === "opencode") && (body.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(body.name)))
+    throw new Error("Cursor and OpenCode skill names must be lowercase words separated by single hyphens (up to 64 characters)");
+  if (body.compatibleWith.includes("opencode") && body.description.length > 1024)
+    throw new Error("OpenCode skill descriptions must be at most 1024 characters");
   rejectSecrets("skill-metadata", Buffer.from(canonical({ ...body, files: [] })));
   if (body.files.some(f => f.path === ".pi-share-skill.json")) throw new Error("Skill bundle uses a reserved installation receipt path");
   body.files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);

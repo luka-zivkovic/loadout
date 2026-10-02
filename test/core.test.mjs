@@ -46,6 +46,27 @@ test('capture merges project configuration and exports no credentials or session
   assert(!existsSync(join(dir, 'restored/auth.json')));
 });
 
+test('Pi built-in extension overrides survive one-time setup capture', t => {
+  const dir = temp(t); const agent = join(dir, 'agent'); const project = join(dir, 'repo');
+  put(join(agent, 'settings.json'), JSON.stringify({
+    defaultProvider: 'test', defaultModel: 'one',
+    extensions: ['-builtin:mcp', '+builtin:codemode'],
+  }));
+  const global = captureProfile({ name: 'global', scope: 'work', agentDir: agent });
+  assert.deepEqual(global.settings.extensions, ['+builtin:codemode', '-builtin:mcp']);
+  assert.deepEqual(global.resources.extensions, []);
+  assert.equal(validateProfile(global).revision, global.revision);
+  put(join(project, '.pi', 'settings.json'), JSON.stringify({
+    extensions: ['+builtin:mcp', '-builtin:tool-search'],
+  }));
+  const layered = captureProfile({ name: 'layered', scope: 'work', agentDir: agent, project });
+  assert.deepEqual(layered.settings.extensions, ['+builtin:codemode', '+builtin:mcp', '-builtin:tool-search']);
+  put(join(project, '.pi', 'settings.json'), JSON.stringify({
+    extensions: ['-builtin:not-real'],
+  }));
+  assert.throws(() => captureProfile({ name: 'invalid', scope: 'work', agentDir: agent, project }), /Unknown Pi built-in extension/);
+});
+
 test('portable profiles reject unpinned packages, tampering, traversal, symlinks and embedded credentials', t => {
   const dir = temp(t); const good = exampleProfile('review', 'work', 'example/model');
   assert.throws(() => assertPinned('npm:some-package'), /exact npm version/);
