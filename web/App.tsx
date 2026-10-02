@@ -362,7 +362,7 @@ function Auth({
           <SharingLink />
         </div>
         <span className="auth-bottom">
-          Self-hosted · Invitation only · Pi, Claude Code & Codex
+          Self-hosted · Invitation only · Pi, Claude Code, Codex, Cursor & OpenCode
         </span>
       </main>
     </div>

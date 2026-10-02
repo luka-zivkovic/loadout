@@ -1148,6 +1148,10 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
           wide
         >
           <div className="modal-body measurement-onboarding">
+            <p className="muted">
+              Usage collection currently supports Pi, Claude Code, and Codex.
+              Cursor and OpenCode setups can be shared without measurement.
+            </p>
             <div
               className="measurement-harnesses"
               role="group"
@@ -1195,9 +1199,9 @@ export function Devices({ team }: { team: Dashboard["team"] }) {
         >
           <div className="modal-body">
             <p>
-              Give the instructions below to your local Pi, Claude Code, or
-              Codex agent. They guide one-time setup sharing after you approve
-              the device.
+              Give the instructions below to your local Pi, Claude Code, Codex,
+              Cursor, or OpenCode agent. They guide one-time setup sharing after
+              you approve the device.
             </p>
             {instructions ? (
               <Copy text={instructions} label="Copy agent instructions" primary />
