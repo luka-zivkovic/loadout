@@ -89,10 +89,10 @@ export function rejectSecrets(path: string, bytes: Buffer) {
   )
     throw new Error(`Credential file cannot enter a profile: ${path}`);
   const text = bytes.toString("utf8");
-  // Exact n8n credential references are local field placeholders, not values.
-  const assignedCredential = /["']?(?:api[_-]?key|access[_-]?token|secret|password)["']?\s*[:=]\s*(["'])([^"'\s]{12,})\1/gi;
-  const hasLiteralCredential = [...text.matchAll(assignedCredential)].some(([, , value]) =>
-    !/^=\{\{\$credentials(?:\.[A-Za-z_$][\w$]*)+\}\}$/.test(value!),
+  // Exempt exact n8n credential references only when their quotes match.
+  const assignedCredential = /["']?(?:api[_-]?key|access[_-]?token|secret|password)["']?\s*[:=]\s*(["'])([^"'\s]{12,})(["'])/gi;
+  const hasLiteralCredential = [...text.matchAll(assignedCredential)].some(([, opening, value, closing]) =>
+    opening !== closing || !/^=\{\{\$credentials(?:\.[A-Za-z_$][\w$]*)+\}\}$/.test(value!),
   );
   if (
     embeddedCapability.test(text) ||

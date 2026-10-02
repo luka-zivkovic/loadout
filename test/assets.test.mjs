@@ -239,6 +239,10 @@ test('n8n credential references in skill examples are not treated as embedded ke
   assert.throws(() => captureSetup(options), /Possible embedded credential/);
   put(skill, header + "\npassword: 'hardcoded-value-123456'\n");
   assert.throws(() => captureSetup(options), /Possible embedded credential/);
+  put(skill, header + "\npassword: \"hardcoded-value-123456'\n");
+  assert.throws(() => captureSetup(options), /Possible embedded credential/);
+  put(skill, header + "\napi_key: '={{$credentials.apiKey}}\"\n");
+  assert.throws(() => captureSetup(options), /Possible embedded credential/);
 });
 
 test('Claude inventory and resource selection skip unchosen files before scanning', t => {
@@ -279,6 +283,14 @@ test('Claude inventory and resource selection skip unchosen files before scannin
   put(join(root, 'skills/unused/SKILL.md'), "---\nname: unused\ndescription: Still private.\n---\npassword: 'literal-value-987654321'\n");
   assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'unchanged');
   put(join(root, 'skills/keep/SKILL.md'), '---\nname: keep\ndescription: Keep this skill.\n---\nChanged.');
+  assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'changed');
+  put(join(root, 'skills/keep/SKILL.md'), '---\nname: keep\ndescription: Keep this skill.\n---\nKeep.');
+  assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'unchanged');
+  rmSync(join(root, 'skills/outside'));
+  rmSync(join(root, 'skills/unused'), { recursive: true });
+  assert.equal(JSON.parse(cli('setup', 'check', 'without-unused'))[0].state, 'unchanged');
+  assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'unchanged');
+  rmSync(join(root, 'skills/keep'), { recursive: true });
   assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'changed');
   assert.throws(() => cli('setup', 'capture', 'typo', ...common, '--only-resource', 'global/skills/missing'), /Unknown Claude capture resource/);
   assert.throws(() => cli('setup', 'capture', 'mixed', ...common, '--only-resource', 'global/skills/keep', '--exclude-resource', 'global/skills/unused'), /either --only-resource or --exclude-resource/);
