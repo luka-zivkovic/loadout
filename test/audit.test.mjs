@@ -710,6 +710,84 @@ test("quotas reject new uploads atomically while listings do not decode stored a
   assert.equal(f.registry.changes(0, 100).changes.length, before);
 });
 
+test("Cursor and OpenCode setups cannot create comparisons", async (t) => {
+  const f = await fixture(t);
+  for (const harness of ["cursor", "opencode"]) {
+    const setup = (name) =>
+      sealNativeSetup({
+        schemaVersion: 2,
+        kind: "setup",
+        name,
+        scope: "work",
+        harness: { kind: harness, version: "fixture" },
+        settings: {},
+        workflow: { id: "review", prompt: "Review carefully." },
+        resources: { skills: [], hooks: [], agents: [], prompts: [] },
+        instructions: [],
+        files: [],
+        skillPins: [],
+        requirements: [],
+        omittedSettings: [],
+      });
+    const baseline = setup(`${harness}-baseline`);
+    const candidate = setup(`${harness}-candidate`);
+    f.registry.publish("admin", baseline, null);
+    f.registry.publish("colleague", candidate, null);
+    const trialCount = f.registry.ops.trials().length;
+    const response = await f.call("/api/trials", {
+      name: `${harness} comparison`,
+      baseline: ref("admin", baseline),
+      candidate: ref("colleague", candidate),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "unsupported_harness");
+    assert.equal(f.registry.ops.trials().length, trialCount);
+    if (harness === "cursor") {
+      await f.device("unsupported-trial");
+      const trialId = randomUUID();
+      const now = new Date().toISOString();
+      f.registry.db
+        .prepare("INSERT INTO trials(trial_id,owner,body) VALUES(?,?,?)")
+        .run(
+          trialId,
+          "admin",
+          canonical({
+            trialId,
+            owner: "admin",
+            name: "Previously created Cursor comparison",
+            baseline: ref("admin", baseline),
+            candidate: ref("colleague", candidate),
+            createdAt: now,
+            updatedAt: now,
+            kind: "observation",
+            conclusion: null,
+          }),
+        );
+      await assert.rejects(
+        () =>
+          exec(
+            process.execPath,
+            [
+              "dist/cli.js",
+              "team",
+              "trial",
+              "team",
+              trialId,
+              "--home",
+              join(f.dir, "unsupported-trial"),
+              "--scope",
+              "work",
+              "--prepare-only",
+            ],
+            { cwd: process.cwd() },
+          ),
+        /Comparisons currently support Pi, Claude Code, and Codex setups only/,
+      );
+    }
+  }
+  assert.equal(f.registry.ops.trials().length, 1);
+});
+
 test("CLI trial preparation freezes the chosen local task and preserves pinned native launch configuration", async (t) => {
   const f = await fixture(t);
   const d = await f.device("trial-cli");

@@ -52,6 +52,7 @@ import {
   saveSetup,
 } from "./setups.js";
 import { assertLocalAvailable } from "./availability.js";
+import { supportsSetupComparison } from "./onboarding.js";
 import { rememberCapture, checkSources } from "./local-state.js";
 import { TelemetryCheckpoint, recoverTelemetry } from "./checkpoints.js";
 import { setTimeout as delay } from "node:timers/promises";
@@ -418,6 +419,13 @@ async function main() {
           alias: `trial-${trial.trialId.slice(0, 8)}-candidate`,
         },
       );
+      if (
+        !supportsSetupComparison(setupHarness(baseline.profile)) ||
+        !supportsSetupComparison(setupHarness(candidate.profile))
+      )
+        throw new Error(
+          "Comparisons currently support Pi, Claude Code, and Codex setups only. Cursor and OpenCode setups can be shared without telemetry.",
+        );
       const dir = join(store.dir, "trials", trial.trialId);
       ensureDir(dir);
       if (

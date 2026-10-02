@@ -18,7 +18,10 @@ import { SetupDiff, refKey } from "./Artifacts";
 import { go, useParam } from "./navigation";
 import { ComparisonTable, RunDetail } from "./Views";
 import { HarnessLabel } from "./HarnessIcon";
-import { hasComparableSetups } from "../src/onboarding";
+import {
+  hasComparableSetups,
+  supportsSetupComparison,
+} from "../src/onboarding";
 
 const ref = (p: ProfileListing) => ({
   owner: p.owner,
@@ -54,7 +57,7 @@ export function Trials({
               comparable ? setCreating("1") : go("/setups?share=1")
             }
           >
-            {comparable ? "New comparison" : "Share a matching setup"}
+            {comparable ? "New comparison" : "Share a comparable setup"}
           </button>
         </div>
         {data.trials.length ? (
@@ -96,12 +99,12 @@ export function Trials({
                   comparable ? setCreating("1") : go("/setups?share=1")
                 }
               >
-                {comparable ? "Choose two revisions" : "Share a matching setup"}
+                {comparable ? "Choose two revisions" : "Share a comparable setup"}
               </button>
             }
           >
-            Use the same harness and workflow. Task context and review output
-            stay local.
+            Comparisons support Pi, Claude Code, and Codex setups with the same
+            harness and workflow. Task context and review output stay local.
           </Empty>
         )}
       </section>
@@ -197,11 +200,17 @@ function TrialWizard({
   close: () => void;
 }) {
   const [candidateParam] = useParam("candidate");
+  const suggestedCandidate =
+    data.profiles.find(
+      (p) =>
+        p.owner !== user.actorId &&
+        supportsSetupComparison(p.harness?.kind ?? "pi"),
+    ) ??
+    data.profiles.find((p) =>
+      supportsSetupComparison(p.harness?.kind ?? "pi"),
+    );
   const [candidateKey, setCandidate] = useState(
-    candidateParam ||
-      (data.profiles.find((p) => p.owner !== user.actorId)
-        ? refKey(data.profiles.find((p) => p.owner !== user.actorId)!)
-        : ""),
+    candidateParam || (suggestedCandidate ? refKey(suggestedCandidate) : ""),
   );
   const [history, setHistory] = useState<ProfileListing[]>([]);
   const [historyError, setHistoryError] = useState("");
@@ -243,6 +252,7 @@ function TrialWizard({
   const candidate = catalogue.find((p) => refKey(p) === candidateKey);
   const eligible = catalogue.filter(
     (p) =>
+      supportsSetupComparison(p.harness?.kind ?? "pi") &&
       p.revision !== candidate?.revision &&
       (!candidate ||
         ((p.harness?.kind ?? "pi") === (candidate.harness?.kind ?? "pi") &&
@@ -280,8 +290,9 @@ function TrialWizard({
         }}
       >
         <p>
-          Pick two revisions of the same harness and workflow. Inspect their
-          differences before preparing a local comparison.
+          Pick two Pi, Claude Code, or Codex revisions with the same harness
+          and workflow. Inspect their differences before preparing a local
+          comparison.
         </p>
         <Field
           label="Comparison label"
@@ -306,8 +317,15 @@ function TrialWizard({
             >
               <option value="">Choose candidate</option>
               {catalogue.map((p) => (
-                <option key={refKey(p)} value={refKey(p)}>
+                <option
+                  key={refKey(p)}
+                  value={refKey(p)}
+                  disabled={!supportsSetupComparison(p.harness?.kind ?? "pi")}
+                >
                   {label(p)}
+                  {!supportsSetupComparison(p.harness?.kind ?? "pi")
+                    ? " · sharing only"
+                    : ""}
                 </option>
               ))}
             </select>
@@ -334,9 +352,9 @@ function TrialWizard({
         <ErrorBox error={historyError} />
         {!eligible.length && (
           <p className="notice">
-            Publish a second revision with the same harness and workflow first.
-            A whole setup remains native to its harness; individual skills can
-            be shared across harnesses.
+            {candidate && !supportsSetupComparison(candidate.harness?.kind ?? "pi")
+              ? "This setup can be shared, but comparisons currently support Pi, Claude Code, and Codex only. Choose a supported candidate."
+              : "Publish a second Pi, Claude Code, or Codex revision with the same harness and workflow first. Individual skills can be shared across harnesses."}
           </p>
         )}
         {baseline && candidate && (

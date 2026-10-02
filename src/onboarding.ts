@@ -1,3 +1,5 @@
+import { observedHarnessSchema } from "./schema.js";
+
 export type ComparableSetup = {
   revision: string;
   workflowId: string;
@@ -6,9 +8,16 @@ export type ComparableSetup = {
 
 export type WorkspaceStep = "connect-device" | "publish-setup";
 
+export function supportsSetupComparison(harness: string): boolean {
+  return observedHarnessSchema.safeParse(harness).success;
+}
+
 export function hasComparableSetups(setups: ComparableSetup[]) {
-  return setups.some((setup, index) =>
-    setups.slice(index + 1).some(
+  const eligible = setups.filter((setup) =>
+    supportsSetupComparison(setup.harness?.kind ?? "pi"),
+  );
+  return eligible.some((setup, index) =>
+    eligible.slice(index + 1).some(
       (candidate) =>
         candidate.revision !== setup.revision &&
         candidate.workflowId === setup.workflowId &&

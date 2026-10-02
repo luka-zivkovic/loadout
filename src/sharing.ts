@@ -5,7 +5,7 @@ export const sharingDisclosure = {
   sections: [
     {
       title: "Shared setups",
-      body: "When published: standalone skill instructions and supporting files; Pi, Claude Code, or Codex settings, reusable workflows, pinned skills, prompt templates, global harness instructions, hooks, plugin declarations, MCP server names, extensions, and bundled files. MCP connection details and native credentials stay local.",
+      body: "When published: standalone skill instructions and supporting files; Pi, Claude Code, and Codex settings, reusable workflows, pinned skills, prompt templates, global instructions, hooks, plugin declarations, extensions, and bundled files; Cursor and OpenCode selected settings, captured project or global rules and instructions, commands, agents, hooks, plugin and tool files, and skills. MCP servers are shared by name only. Cursor account-synced rules, OpenCode package plugin declarations, MCP connection details, and native credentials stay local.",
     },
     {
       title: "Usage metadata",
