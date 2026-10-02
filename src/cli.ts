@@ -790,7 +790,7 @@ async function main() {
       console.log(JSON.stringify(result, null, 2));
       if (result.harness !== "pi")
         console.log(
-          `\nLaunch from your project with:\n${result.harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}='${result.directory.replace(/'/g, "'\\''")}' ${result.harness === "codex" ? "codex" : "claude"}${setup.schemaVersion === 2 && setup.mcpServers ? ` --mcp-config '${join(result.directory, "mcp.json").replace(/'/g, "'\\''")}'` : ""}`,
+          `\nLaunch from your project with:\n${result.harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}='${result.directory.replace(/'/g, "'\\''")}' ${result.harness === "codex" ? "codex" : "claude"}`,
         );
       return;
     }
@@ -834,7 +834,7 @@ async function main() {
       server.token,
     );
     if (directory)
-      launch = `${setup.harness.kind === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}=${shellQuote(directory)} ${launch}${setup.mcpServers ? ` --mcp-config ${shellQuote(join(directory, "mcp.json"))}` : ""}`;
+      launch = `${setup.harness.kind === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}=${shellQuote(directory)} ${launch}`;
     console.log(
       `Local ${harnessLabels[setup.harness.kind]} metadata collector for ${setup.name}.\nStart your harness in another terminal:\n\n${launch}\n\nCounters checkpoint locally every 5 seconds. Active checkpoints stay local until the collector stops. After a crash, use loadout telemetry recover.\n\nExit the harness to flush its events, then Ctrl-C here to save measurements. Run team sync separately to upload them.\nThe selected setup is an attribution label; effective configuration and task context are not verified. No raw events are retained.`,
     );

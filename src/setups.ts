@@ -11,7 +11,7 @@ import type { Store } from "./store.js";
 
 const keys: Record<"claude-code" | "codex", string[]> = {
   "claude-code": ["model", "effortLevel", "outputStyle", "language", "permissions", "hooks", "enabledPlugins", "agent", "teammateMode"],
-  codex: ["model", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "personality", "developer_instructions", "approval_policy", "sandbox_mode", "web_search", "mcp_servers", "hooks", "features"],
+  codex: ["model", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "personality", "developer_instructions", "approval_policy", "sandbox_mode", "web_search", "hooks", "features"],
 };
 const DEFAULT_NATIVE_REVIEW = "Review the requested change in the current local project. Follow its project instructions and trace the affected behavior. Report actionable defects with file and line references, impact, and evidence. Do not modify files. Keep the code and review output local.";
 export const nativeAgentDir = (h: Harness) => h === "pi" ? process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi/agent") : h === "claude-code" ? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude") : process.env.CODEX_HOME ?? join(homedir(), ".codex");
@@ -20,6 +20,8 @@ export function detectedVersion(harness: Harness): string {
   catch { return "unknown"; }
 }
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected a settings object"); return value as Record<string, unknown>; }
+function mcpNames(raw: unknown): string[] { return Object.keys(object(raw)).map(name => id.parse(name)); }
+/** Legacy v2 definitions are read for revision verification, never captured again. */
 function selectedMcp(raw: unknown, omitted: string[]) {
   return Object.fromEntries(Object.entries(object(raw)).map(([name, server]) => {
     id.parse(name);
@@ -31,8 +33,8 @@ function selectedMcp(raw: unknown, omitted: string[]) {
   }));
 }
 /** Credentials, telemetry destinations, history, memory and machine state never enter native settings. */
-function selectedSettings(harness: "claude-code" | "codex", raw: Record<string, unknown>, omitted: string[]): Record<string, unknown> {
-  const result = Object.fromEntries(Object.entries(raw).filter(([key]) => { const keep = keys[harness].includes(key); if (!keep) omitted.push(key); return keep; }));
+function selectedSettings(harness: "claude-code" | "codex", raw: Record<string, unknown>, omitted: string[], legacy = false): Record<string, unknown> {
+  const result = Object.fromEntries(Object.entries(raw).filter(([key]) => { const keep = keys[harness].includes(key) || (legacy && harness === "codex" && key === "mcp_servers"); if (!keep) omitted.push(key); return keep; }));
   if (result.mcp_servers) result.mcp_servers = Object.fromEntries(Object.entries(object(result.mcp_servers)).map(([name, server]) => {
     id.parse(name);
     const clean = Object.fromEntries(Object.entries(object(server)).filter(([key]) => {
@@ -47,8 +49,9 @@ function selectedSettings(harness: "claude-code" | "codex", raw: Record<string, 
 export function sealNativeSetup(raw: Omit<NativeSetup, "revision">): NativeSetup {
   const body = nativeSetupBodySchema.parse(raw); validateFiles(body.files);
   const omitted: string[] = [];
-  if (canonical(selectedSettings(body.harness.kind, body.settings, omitted)) !== canonical(body.settings) || omitted.length) throw new Error("Native setup contains unsupported or local-only settings");
+  if (canonical(selectedSettings(body.harness.kind, body.settings, omitted, Boolean(body.settings.mcp_servers))) !== canonical(body.settings) || omitted.length) throw new Error("Native setup contains unsupported or local-only settings");
   if (body.mcpServers && (body.harness.kind !== "claude-code" || canonical(selectedMcp(body.mcpServers, omitted)) !== canonical(body.mcpServers) || omitted.length)) throw new Error("MCP definitions contain local-only settings");
+  if (body.mcpServerNames && new Set(body.mcpServerNames).size !== body.mcpServerNames.length) throw new Error("Duplicate MCP server name");
   rejectSecrets("workflow.md", Buffer.from(body.workflow.prompt));
   rejectSecrets("setup-metadata", Buffer.from(canonical({ ...body, files: [] })));
   for (const path of body.instructions) { safePath(path); if (!body.files.some(f => f.path === path)) throw new Error(`Missing instruction file: ${path}`); }
@@ -106,15 +109,16 @@ export function captureSetup(options: { name: string; scope: "work" | "personal"
     resources: { skills: [], hooks: [], agents: [], prompts: [] }, instructions: [], requirements: [], omittedSettings: [], skillPins: [], files: [],
   };
   const skills = new Map<string, Skill>();
+  const serverNames = new Set<string>();
   if (harness === "claude-code") {
     const sources = [join(root, ".mcp.json"), ...(root === resolve(nativeAgentDir("claude-code")) ? [join(homedir(), ".claude.json")] : []), ...(options.project ? [join(resolve(options.project), ".mcp.json")] : [])];
-    for (const file of sources) if (existsSync(file)) { const raw = object(jsonRead(file)); if (raw.mcpServers) body.mcpServers = { ...body.mcpServers, ...selectedMcp(raw.mcpServers, body.omittedSettings) }; }
-    if (body.mcpServers && Object.keys(body.mcpServers).length) body.requirements.push("Provide MCP credentials locally. Launch Claude Code with --mcp-config pointing to the exported mcp.json.");
+    for (const file of sources) if (existsSync(file)) { const raw = object(jsonRead(file)); if (raw.mcpServers) for (const name of mcpNames(raw.mcpServers)) serverNames.add(name); }
   }
   for (const layer of layers) {
     const config = join(layer.root, harness === "codex" ? "config.toml" : "settings.json");
     if (existsSync(config)) {
       const raw = object(harness === "codex" ? parseToml(readFileSync(config, "utf8")) : jsonRead(config));
+      if (harness === "codex" && raw.mcp_servers) for (const name of mcpNames(raw.mcp_servers)) serverNames.add(name);
       body.settings = { ...body.settings, ...selectedSettings(harness, raw, body.omittedSettings) };
     }
     for (const kind of ["hooks", "agents", "prompts"] as const) {
@@ -149,10 +153,11 @@ export function captureSetup(options: { name: string; scope: "work" | "personal"
     }
   }
   if (options.model) body.settings.model = options.model;
+  if (serverNames.size) body.mcpServerNames = [...serverNames].sort();
   for (const [name, skill] of skills) { const path = `shared-skills/${name}`; body.skillPins.push(makeSkillPin(skill, path)); body.resources.skills.push(path); body.files.push(...skill.files.map(f => ({ ...f, path: `${path}/${f.path}` }))); }
   body.omittedSettings = [...new Set(body.omittedSettings)].sort();
   if (body.settings.enabledPlugins) body.requirements.push("Install the declared plugins locally with their native plugin manager.");
-  if (body.settings.mcp_servers) body.requirements.push("Provide MCP credentials and required executables on the receiving device.");
+  if (body.mcpServerNames?.length) body.requirements.push("Configure the named MCP servers locally; connection details and credentials are not included.");
   if (body.settings.hooks || body.resources.hooks.length) body.requirements.push("Review hook commands and resolve machine-specific paths before use.");
   body.files.sort((a, b) => a.path.localeCompare(b.path)); return sealNativeSetup(body);
 }
@@ -169,9 +174,9 @@ export function materializeSetup(setup: Setup, dest: string) {
   });
   // Project resource files override the same global resource path, matching native precedence.
   const unique = [...new Map(mapped.map(f => [f.path, f])).values()];
-  const settings = setup.harness.kind === "codex" ? stringifyToml(setup.settings as Parameters<typeof stringifyToml>[0]) : JSON.stringify(setup.settings, null, 2);
+  const { mcp_servers: _legacyMcpServers, ...safeSettings } = setup.settings;
+  const settings = setup.harness.kind === "codex" ? stringifyToml(safeSettings as Parameters<typeof stringifyToml>[0]) : JSON.stringify(safeSettings, null, 2);
   unique.push(packFile(setup.harness.kind === "codex" ? "config.toml" : "settings.json", Buffer.from(settings)));
-  if (setup.mcpServers) unique.push(packFile("mcp.json", Buffer.from(JSON.stringify({ mcpServers: setup.mcpServers }, null, 2))));
   for (const pin of setup.skillPins) {
     const { path, ...meta } = pin;
     unique.push(packFile(`skills/${pin.name}/.pi-share-skill.json`, Buffer.from(JSON.stringify({ ...meta, scope: setup.scope, schemaVersion: 1, kind: "skill" }))));
@@ -179,4 +184,13 @@ export function materializeSetup(setup: Setup, dest: string) {
   unpack(unique, resolve(dest));
   writeFileSync(join(resolve(dest), "pi-share-setup.json"), JSON.stringify({ name: setup.name, revision: setup.revision, harness: setup.harness, skillPins: setup.skillPins.map(({ name, revision }) => ({ name, revision })) }, null, 2), { flag: "wx", mode: 0o600 });
   return { directory: resolve(dest), harness: setup.harness.kind, requirements: [...setup.requirements, ...setup.skillPins.flatMap(pin => pin.requirements.map(r => `${pin.name}: ${r}`))], instructions: `Use ${setup.harness.kind === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"} to select this directory. Authenticate locally if needed; no account credentials are included.` };
+}
+
+export function setupMcpServerNames(setup: Setup): string[] {
+  if (setup.schemaVersion === 1) return [];
+  return [...new Set([...(setup.mcpServerNames ?? []), ...Object.keys(setup.mcpServers ?? {}), ...Object.keys(object(setup.settings.mcp_servers ?? {}))])].sort();
+}
+
+export function hasMcpDetails(setup: Setup): boolean {
+  return setup.schemaVersion !== 1 && (setup.mcpServers !== undefined || setup.settings.mcp_servers !== undefined);
 }

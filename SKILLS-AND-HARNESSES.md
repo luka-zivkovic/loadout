@@ -61,9 +61,11 @@ loadout team publish engineering my-claude --scope work
 
 `--agent-dir` selects another configuration directory. `--project` includes supported project configuration/resources; repository instruction files stay with the task. `--workflow` and `--prompt FILE` declare the reusable workflow. Native versions are detected from the installed CLI; a missing executable records `unknown`. `--harness-version` is available for offline/test capture.
 
-Native capture deliberately selects supported model/reasoning settings, permission settings, hooks, reusable global instructions, skill directories, and other reusable resources. Claude captures enabled plugin declarations and selected MCP definitions. Codex captures selected MCP definitions in native TOML. Authentication files, telemetry destinations, session history, automatic memories, arbitrary environment values, and project account/trust state are excluded. Omitted setting names appear in the setup inspector.
+Native capture deliberately selects supported model/reasoning settings, permission settings, hooks, reusable global instructions, skill directories, and other reusable resources. Claude captures enabled plugin declarations. Claude and Codex record MCP server names only; commands, arguments, URLs, and credentials are not included. Authentication files, telemetry destinations, session history, automatic memories, arbitrary environment values, and project account/trust state are excluded. Omitted setting names appear in the setup inspector.
 
-Plugin declarations and MCP definitions are requirements, not bundled installations. Environment values and HTTP authentication headers are omitted; provide them locally. Hook scripts are bundled when they live under the captured hooks directory, but machine-specific command paths may need adjustment. Dependencies outside captured directories and installed plugin caches are not copied. Managed policies remain authoritative.
+Plugin declarations and named MCP servers are requirements, not bundled installations. Configure MCP servers independently on each receiving device. Hook scripts are bundled when they live under the captured hooks directory, but machine-specific command paths may need adjustment. Dependencies outside captured directories and installed plugin caches are not copied. Managed policies remain authoritative.
+
+Historical native revisions that contain MCP definitions remain in registry history, but their browser previews show names only and their downloads and file inspection are blocked. Recapture and publish a names-only revision to restore distribution.
 
 If a native skill has nonstandard or invalid frontmatter, setup capture retains its files as a native resource and adds a requirement to review it. It receives no standalone skill pin or cross-harness compatibility declaration. Explicit standalone skill capture still requires valid metadata, and credential/file checks still apply. An invalid installed shared-skill receipt cannot silently fall back to an unpinned resource.
 
@@ -72,7 +74,7 @@ loadout team pull engineering alice/my-claude --scope work --as colleague-claude
 loadout setup materialize colleague-claude --scope work --out /path/to/new-config
 ```
 
-Materialize creates a new native configuration directory and prints a launch command using `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Launch from your chosen local project, authenticate locally if needed, and resolve the listed dependencies. Claude MCP definitions are exported to `mcp.json`; the printed launch command selects that file. Your default harness configuration is not overwritten. Local project configuration and ambient resources may still affect behavior, so these launches are not controlled experiments.
+Materialize creates a new native configuration directory and prints a launch command using `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Launch from your chosen local project, authenticate locally if needed, and resolve the listed dependencies. It does not export MCP definitions or an `mcp.json`; configure the named servers locally if the workflow needs them. Your default harness configuration is not overwritten. Local project configuration and ambient resources may still affect behavior, so these launches are not controlled experiments.
 
 Setup snapshots and skills are **explicitly captured and published**. Pulling pins the selected revision. `team sync --watch` exchanges saved measurements and catalogue metadata; it neither publishes configuration changes nor installs newer versions automatically. Optional `--check` detects drift against saved capture sources without updating the saved/published setup; see [TEAM.md](TEAM.md). Optimistic concurrency checks reject publishing over a revision changed on another device.
 
@@ -84,7 +86,7 @@ Pi continues to use `/share-start` and `/share-stop`. For Claude Code or Codex:
 loadout telemetry listen my-codex --scope work
 ```
 
-The collector prints a command to launch the matching installed harness with OTLP HTTP JSON routed to an authenticated, loopback-only endpoint. Run that command in another terminal from your project. To select a materialized setup, pass `--config-dir /path/to/new-config` to the collector. It validates the local revision receipt and includes `CODEX_HOME` or `CLAUDE_CONFIG_DIR` (plus Claude MCP configuration) in the launch command. This receipt binds the intended launch, but does not attest effective runtime configuration. Exit the harness first so it flushes events, then press Ctrl-C in the collector to save local measurements. Finally:
+The collector prints a command to launch the matching installed harness with OTLP HTTP JSON routed to an authenticated, loopback-only endpoint. Run that command in another terminal from your project. To select a materialized setup, pass `--config-dir /path/to/new-config` to the collector. It validates the local revision receipt and includes `CODEX_HOME` or `CLAUDE_CONFIG_DIR` in the launch command. This receipt binds the intended launch, but does not attest effective runtime configuration. Exit the harness first so it flushes events, then press Ctrl-C in the collector to save local measurements. Finally:
 
 ```sh
 loadout team sync engineering --scope work

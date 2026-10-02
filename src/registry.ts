@@ -25,7 +25,7 @@ import {
   type Setup,
   type Skill,
 } from "./schema.js";
-import { validateSetup } from "./setups.js";
+import { hasMcpDetails, validateSetup } from "./setups.js";
 import { validateSkill } from "./skills.js";
 import {
   credentialSchema,
@@ -205,6 +205,8 @@ export class Registry {
   }
   publish(actor: string, raw: Setup, expectedRevision: string | null) {
     const profile = validateSetup(raw);
+    if (hasMcpDetails(profile))
+      return failure(400, "mcp_details_not_shareable", "Recapture this setup: only MCP server names may be shared.");
     if (profile.scope !== this.metadata.scope)
       return failure(
         403,
@@ -577,6 +579,10 @@ export async function serveRegistry(
         send(res, 200, { ok: true });
         return;
       }
+      if (!url.pathname.startsWith("/v1/")) {
+        send(res, 404, { error: "not_found", message: "Unknown route" });
+        return;
+      }
       const identity = registry.authenticate(
         /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1] ?? "",
       );
@@ -683,12 +689,15 @@ export async function serveRegistry(
         url.pathname,
       );
       if (req.method === "GET" && profilePath) {
+        const profile = registry.profile(
+          decodeURIComponent(profilePath[1]!),
+          decodeURIComponent(profilePath[2]!),
+          profilePath[3]!,
+        );
+        if (hasMcpDetails(profile))
+          return failure(410, "legacy_mcp_details", "This historical setup contains MCP connection details. Recapture and publish a names-only revision.");
         send(res, 200, {
-          profile: registry.profile(
-            decodeURIComponent(profilePath[1]!),
-            decodeURIComponent(profilePath[2]!),
-            profilePath[3]!,
-          ),
+          profile,
         });
         return;
       }

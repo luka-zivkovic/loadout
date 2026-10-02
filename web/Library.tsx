@@ -470,6 +470,7 @@ function SetupDetail({
   presentation?: "drawer" | "page";
 }) {
   const [profile, setProfile] = useState<SetupPreview | null>(null);
+  const [legacyBlocked, setLegacyBlocked] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [previous, setPrevious] = useState<{
@@ -481,11 +482,15 @@ function SetupDetail({
     let live = true;
     setError("");
     setProfile(null);
+    setLegacyBlocked(false);
     api(
       `/setups/${encodeURIComponent(listing.owner)}/${encodeURIComponent(listing.name)}/${listing.revision}`,
     )
       .then((r) => {
-        if (live) setProfile(r.profile);
+        if (live) {
+          setProfile(r.profile);
+          setLegacyBlocked(Boolean(r.legacyMcpDetailsBlocked));
+        }
       })
       .catch((e) => {
         if (live) setError(e.message);
@@ -501,7 +506,7 @@ function SetupDetail({
   const activationCommand =
     harness === "pi"
       ? `PACKET="/path/to/frozen-review"\nloadout run ${alias} --scope ${data.team.scope} --packet "$PACKET"`
-      : `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n${harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}="$SETUP_DIR" ${harness === "codex" ? "codex" : "claude"}${profile?.schemaVersion === 2 && profile.mcpServers ? ` --mcp-config "$SETUP_DIR/mcp.json"` : ""}`;
+      : `SETUP_DIR="$HOME/loadout-setups/${alias}"\nloadout setup materialize ${alias} --scope ${data.team.scope} --out "$SETUP_DIR"\n${harness === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}="$SETUP_DIR" ${harness === "codex" ? "codex" : "claude"}`;
   const commands = `${pullCommand}\n${inspectCommand}\n${activationCommand}`;
   const requirements = profile
     ? [
@@ -609,8 +614,17 @@ function SetupDetail({
                 resources · {profile.files.length} files
               </dd>
             </div>
+            {profile.schemaVersion === 2 && profile.mcpServerNames?.length ? (
+              <div>
+                <dt>MCP servers</dt>
+                <dd>{profile.mcpServerNames.join(", ")}</dd>
+              </div>
+            ) : null}
           </div>
-          <section className="setup-use-guide" aria-labelledby="setup-use-title">
+          {legacyBlocked && (
+            <p className="notice spaced">This older revision cannot be downloaded because it contains MCP connection details. Ask the publisher to recapture and publish a names-only revision.</p>
+          )}
+          {!legacyBlocked && <section className="setup-use-guide" aria-labelledby="setup-use-title">
             <header>
               <div>
                 <span className="data-label">Local, explicit activation</span>
@@ -690,8 +704,8 @@ function SetupDetail({
                 replace it in the pull command.
               </small>
             </div>
-          </section>
-          <button
+          </section>}
+          {!legacyBlocked && <button
             className="button primary spaced"
             onClick={() =>
               go(
@@ -700,7 +714,7 @@ function SetupDetail({
             }
           >
             Compare with mine <ArrowRight size={16} />
-          </button>
+          </button>}
           <h3 className="section-title">Requirements before use</h3>
           <p className="muted">
             Use {harnessLabels[harness]} with your own local authentication.
@@ -728,7 +742,7 @@ function SetupDetail({
           )}
           {previous ? (
             <SetupDiff baseline={previous} candidate={listing} />
-          ) : (
+          ) : !legacyBlocked ? (
             <FileBrowser
               kind="profile"
               listing={listing}
@@ -756,13 +770,14 @@ function SetupDetail({
                 )
               }
             />
-          )}
+          ) : null}
           <details className="spaced">
             <summary>Native settings and workflow</summary>
             <pre>
               {JSON.stringify(
                 {
                   settings: profile.settings,
+                  ...(profile.schemaVersion === 2 ? { mcpServerNames: profile.mcpServerNames ?? [] } : {}),
                   workflow: profile.workflow,
                   resources: profile.resources,
                 },
@@ -775,7 +790,7 @@ function SetupDetail({
             <summary>Omitted settings ({profile.omittedSettings.length})</summary>
             <p>{profile.omittedSettings.join(", ") || "None"}</p>
           </details>
-          {harness !== "pi" && (
+          {harness !== "pi" && !legacyBlocked && (
             <details className="spaced">
               <summary>Record observations for this native setup</summary>
               <p className="muted">

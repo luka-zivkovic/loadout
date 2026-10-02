@@ -5,7 +5,7 @@ export const sharingDisclosure = {
   sections: [
     {
       title: "Shared setups",
-      body: "When published: standalone skill instructions and supporting files; Pi, Claude Code, or Codex settings, reusable workflows, pinned skills, prompt templates, global harness instructions, hooks, plugin/MCP definitions, extensions, and bundled files. Native settings omit credentials, telemetry destinations, and local account state.",
+      body: "When published: standalone skill instructions and supporting files; Pi, Claude Code, or Codex settings, reusable workflows, pinned skills, prompt templates, global harness instructions, hooks, plugin declarations, MCP server names, extensions, and bundled files. MCP connection details and native credentials stay local.",
     },
     {
       title: "Usage metadata",

@@ -1097,3 +1097,21 @@ test('shared skills and native setups are authenticated, previewable, and filter
   assert.equal((await f.call('/api/dashboard?harness=invalid', undefined, admin)).status, 400);
   assert.equal((await fetch(f.url + '/skills')).status, 200);
 });
+
+test('historical MCP definitions are names-only in browser previews and blocked from CLI download', async t => {
+  const f = await fixture(t); const admin = await f.firstAdmin();
+  const legacy = sealNativeSetup({ schemaVersion: 2, kind: 'setup', name: 'old-mcp', scope: 'work', harness: { kind: 'codex', version: 'fixture' }, settings: { mcp_servers: { docs: { command: 'node', args: ['--api-key', 'opaque-dummy-value-1234567890'] } } }, workflow: { id: 'review', prompt: 'Review.' }, resources: { skills: [], hooks: [], agents: [], prompts: [] }, instructions: [], files: [packFile('global/guide.md', Buffer.from('Safe guide'))], skillPins: [], requirements: [], omittedSettings: [] });
+  f.registry.db.prepare('INSERT INTO blobs(revision,body) VALUES(?,?)').run(legacy.revision, JSON.stringify(legacy));
+  f.registry.db.prepare('INSERT INTO profile_revisions(owner,name,revision,published_at) VALUES(?,?,?,?)').run('admin', legacy.name, legacy.revision, new Date().toISOString());
+  const preview = await f.call(`/api/setups/admin/${legacy.name}/${legacy.revision}`, undefined, admin);
+  assert.equal(preview.status, 200);
+  assert.equal(preview.value.legacyMcpDetailsBlocked, true);
+  assert.deepEqual(preview.value.profile.mcpServerNames, ['docs']);
+  assert(!JSON.stringify(preview.value).includes('opaque-dummy-value'));
+  assert(!JSON.stringify(preview.value).includes('command'));
+  const file = await f.call(`/api/artifacts/profile/admin/${legacy.name}/${legacy.revision}/file?path=global%2Fguide.md`, undefined, admin);
+  assert.equal(file.status, 410);
+  const token = f.registry.grant('admin').token;
+  const response = await fetch(`${f.url}/v1/profiles/admin/${legacy.name}/${legacy.revision}`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(response.status, 410);
+});

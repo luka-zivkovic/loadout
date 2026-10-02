@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import { captureSkill, getSkill, saveSkill, installSkill, skillDestination, validateSkill, pinnedSkill } from '../dist/skills.js';
-import { addSkillToSetup, captureSetup, getSetup, saveSetup, materializeSetup, validateSetup } from '../dist/setups.js';
+import { addSkillToSetup, captureSetup, getSetup, saveSetup, materializeSetup, sealNativeSetup, validateSetup } from '../dist/setups.js';
 import { exampleProfile, listProfiles } from '../dist/profiles.js';
 import { Registry, serveRegistry } from '../dist/registry.js';
 import { Store } from '../dist/store.js';
@@ -66,18 +66,30 @@ test('the same standalone skill pins into Pi, Claude Code, and Codex without tra
 
 test('native capture excludes credentials, telemetry, memory, task context, and per-project account state', t => {
   const dir = temp(t); const root = join(dir, 'codex'); const project = join(dir, 'repo');
-  put(join(root, 'config.toml'), 'model="test-model"\n[otel]\nexporter="none"\n[projects."/PRIVATE/project"]\ntrust_level="trusted"\n[mcp_servers.test]\ncommand="test-server"\nargs=["--local"]\n[mcp_servers.test.env]\nTOKEN="PRIVATE_MCP_SECRET"\n');
+  put(join(root, 'config.toml'), 'model="test-model"\n[otel]\nexporter="none"\n[projects."/PRIVATE/project"]\ntrust_level="trusted"\n[mcp_servers.test]\ncommand="test-server"\nargs=["--api-key","opaque-dummy-value-1234567890"]\n[mcp_servers.test.env]\nTOKEN="PRIVATE_MCP_SECRET"\n');
   put(join(root, 'auth.json'), 'PRIVATE_AUTH'); put(join(root, 'sessions/private.jsonl'), 'PRIVATE_TRACE'); put(join(root, 'memory/MEMORY.md'), 'PRIVATE_MEMORY');
   put(join(root, 'AGENTS.md'), 'Reusable global guidance.'); put(join(project, 'AGENTS.md'), 'PRIVATE_PROJECT_INSTRUCTIONS'); put(join(project, 'code.ts'), 'PRIVATE_CODE');
   const setup = captureSetup({ name: 'safe', scope: 'work', harness: 'codex', agentDir: root, project, version: '1.2.3' });
-  assert(!JSON.stringify(setup).includes('PRIVATE_')); assert.deepEqual(setup.settings.mcp_servers.test, { command: 'test-server', args: ['--local'] });
+  assert(!JSON.stringify(setup).includes('PRIVATE_')); assert(!JSON.stringify(setup).includes('opaque-dummy-value')); assert(!JSON.stringify(setup).includes('test-server')); assert.deepEqual(setup.mcpServerNames, ['test']); assert(!('mcp_servers' in setup.settings));
   assert(setup.omittedSettings.includes('otel')); assert(setup.omittedSettings.includes('projects'));
-  const dest = join(dir, 'exported'); materializeSetup(setup, dest); assert.equal(parseToml(readFileSync(join(dest, 'config.toml'), 'utf8')).model, 'test-model'); assert(!existsSync(join(dest, 'auth.json')));
+  const dest = join(dir, 'exported'); materializeSetup(setup, dest); assert.equal(parseToml(readFileSync(join(dest, 'config.toml'), 'utf8')).model, 'test-model'); assert(!existsSync(join(dest, 'auth.json'))); assert(!('mcp_servers' in parseToml(readFileSync(join(dest, 'config.toml'), 'utf8'))));
   assert.throws(() => materializeSetup(setup, dest), /exists/);
   const claude = join(dir, 'claude'); put(join(claude, 'settings.json'), '{"model":"test-model","env":{"SECRET":"PRIVATE_SECRET"}}');
   put(join(claude, '.mcp.json'), '{"mcpServers":{"docs":{"type":"http","url":"https://example.invalid/mcp","headers":{"Authorization":"PRIVATE_TOKEN"}}}}');
-  const c = captureSetup({ name: 'claude-safe', scope: 'work', harness: 'claude-code', agentDir: claude, version: '1.2.3' }); assert(!JSON.stringify(c).includes('PRIVATE_')); assert.equal(c.mcpServers.docs.url, 'https://example.invalid/mcp');
-  const out = join(dir, 'claude-export'); materializeSetup(c, out); assert.equal(JSON.parse(readFileSync(join(out, 'mcp.json'))).mcpServers.docs.type, 'http');
+  const c = captureSetup({ name: 'claude-safe', scope: 'work', harness: 'claude-code', agentDir: claude, version: '1.2.3' }); assert(!JSON.stringify(c).includes('PRIVATE_')); assert(!JSON.stringify(c).includes('example.invalid')); assert.deepEqual(c.mcpServerNames, ['docs']); assert(!('mcpServers' in c));
+  const out = join(dir, 'claude-export'); materializeSetup(c, out); assert(!existsSync(join(out, 'mcp.json')));
+});
+
+test('registry rejects legacy MCP definitions while retaining historical revision validation', t => {
+  const dir = temp(t);
+  const registry = new Registry(join(dir, 'registry'), { teamName: 'team', scope: 'work' });
+  t.after(() => registry.close());
+  const safe = native(join(dir, 'codex'));
+  const { revision: _revision, mcpServerNames: _names, ...body } = safe;
+  const legacy = sealNativeSetup({ ...body, settings: { ...body.settings, mcp_servers: { docs: { command: 'node', args: ['--api-key', 'opaque-dummy-value-1234567890'] } } } });
+  assert.equal(validateSetup(legacy).revision, legacy.revision);
+  assert.throws(() => registry.publish('alice', legacy, null), /only MCP server names/);
+  assert.equal(registry.publish('alice', safe, null).published, true);
 });
 
 test('install receipts preserve a shared skill revision when each native harness captures it again', t => {
