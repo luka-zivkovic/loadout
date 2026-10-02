@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { jsonRead, jsonWrite } from "./files.js";
-import { captureSetup, listSetups, nativeAgentDir } from "./setups.js";
+import { captureSetup, claudeCaptureInventory, listSetups, nativeAgentDir } from "./setups.js";
 import { setupHarnessSchema, id, hash } from "./schema.js";
 import type { Store } from "./store.js";
 import { collectorLeases } from "./checkpoints.js";
@@ -18,6 +18,8 @@ const optionsSchema = z.object({
   promptFile: z.string().optional(),
   model: z.string().optional(),
   version: z.string().optional(),
+  onlyResources: z.array(z.string()).optional(),
+  excludeResources: z.array(z.string()).optional(),
 });
 const sourcesSchema = z.record(
   id,
@@ -65,13 +67,24 @@ export function checkSources(store: Store, name?: string) {
   for (const [key, source] of Object.entries(all))
     if (!name || key === name) {
       try {
-        source.changed =
-          captureSetup({
-            ...source.options,
-            prompt: source.options.promptFile
-              ? readFileSync(source.options.promptFile, "utf8")
-              : source.options.prompt,
-          }).revision !== source.revision;
+        let onlyResources = source.options.onlyResources;
+        let excludeResources = source.options.excludeResources;
+        let missingSelected = false;
+        if (source.options.harness === "claude-code" && (onlyResources || excludeResources)) {
+          const available = new Set(claudeCaptureInventory(source.options).map(resource => resource.selector));
+          missingSelected = Boolean(onlyResources?.some(selector => !available.has(selector)));
+          onlyResources = onlyResources?.filter(selector => available.has(selector));
+          excludeResources = excludeResources?.filter(selector => available.has(selector));
+        }
+        const current = captureSetup({
+          ...source.options,
+          onlyResources,
+          excludeResources,
+          prompt: source.options.promptFile
+            ? readFileSync(source.options.promptFile, "utf8")
+            : source.options.prompt,
+        });
+        source.changed = missingSelected || current.revision !== source.revision;
         source.error = false;
       } catch {
         source.error = true;

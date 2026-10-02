@@ -89,14 +89,17 @@ export function rejectSecrets(path: string, bytes: Buffer) {
   )
     throw new Error(`Credential file cannot enter a profile: ${path}`);
   const text = bytes.toString("utf8");
+  // Exempt exact n8n credential references only when their quotes match.
+  const assignedCredential = /["']?(?:api[_-]?key|access[_-]?token|secret|password)["']?\s*[:=]\s*(["'])([^"'\s]{12,})(["'])/gi;
+  const hasLiteralCredential = [...text.matchAll(assignedCredential)].some(([, opening, value, closing]) =>
+    opening !== closing || !/^=\{\{\$credentials(?:\.[A-Za-z_$][\w$]*)+\}\}$/.test(value!),
+  );
   if (
     embeddedCapability.test(text) ||
     /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----|\b(?:sk-(?:ant-)?[a-zA-Z0-9_-]{20,}|gh[pousr]_[a-zA-Z0-9]{20,}|github_pat_[a-zA-Z0-9_]{20,}|AKIA[A-Z0-9]{16})\b/.test(
       text,
     ) ||
-    /["']?(?:api[_-]?key|access[_-]?token|secret|password)["']?\s*[:=]\s*["'][^"'\s]{12,}["']/i.test(
-      text,
-    )
+    hasLiteralCredential
   )
     throw new Error(
       `Possible embedded credential in ${path}; replace it with a local environment reference`,

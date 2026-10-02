@@ -235,17 +235,59 @@ function captureProjectSetup(options: Parameters<typeof captureSetup>[0], harnes
   body.files.sort((a, b) => a.path.localeCompare(b.path));
   return sealNativeSetup(body);
 }
-function nativeSkillSources(dir: string, linkedRoot?: string): { dir: string; folder: string }[] {
+export type CaptureResource = {
+  selector: string;
+  kind: "skill" | "agent" | "hook" | "prompt" | "command" | "instruction";
+  includedByDefault: boolean;
+};
+
+export function claudeCaptureInventory(options: { agentDir?: string; project?: string }): CaptureResource[] {
+  const root = resolve(options.agentDir ?? nativeAgentDir("claude-code"));
+  if (!existsSync(root)) throw new Error(`Harness directory does not exist: ${root}`);
+  const layers = [{ root, label: "global" }, ...(options.project ? [{ root: join(resolve(options.project), ".claude"), label: "project" }] : [])];
+  const skip = new Set([".git", "node_modules", "memory", "sessions", ".DS_Store"]);
+  const resources: CaptureResource[] = [];
+  if (existsSync(join(root, "CLAUDE.md")))
+    resources.push({ selector: "global/CLAUDE.md", kind: "instruction", includedByDefault: true });
+  for (const layer of layers) {
+    for (const [directory, kind] of [["skills", "skill"], ["agents", "agent"], ["hooks", "hook"], ["prompts", "prompt"], ["commands", "command"]] as const) {
+      const source = join(layer.root, directory);
+      if (!existsSync(source)) continue;
+      for (const entry of readdirSync(source).sort()) {
+        if (skip.has(entry)) continue;
+        if (kind === "skill" && lstatSync(join(source, entry)).isFile()) continue;
+        // Claude commands can be task-specific, so they enter a snapshot only by selection.
+        resources.push({ selector: `${layer.label}/${directory}/${entry}`, kind, includedByDefault: kind !== "command" });
+      }
+    }
+  }
+  return resources.sort((a, b) => a.selector.localeCompare(b.selector));
+}
+
+function selectedClaudeResources(options: { agentDir?: string; project?: string; onlyResources?: string[]; excludeResources?: string[] }) {
+  if (options.onlyResources && options.excludeResources)
+    throw new Error("Use either --only-resource or --exclude-resource, not both");
+  const resources = claudeCaptureInventory(options);
+  const defaults = new Map(resources.map(resource => [resource.selector, resource.includedByDefault]));
+  for (const selector of [...(options.onlyResources ?? []), ...(options.excludeResources ?? [])])
+    if (!defaults.has(selector)) throw new Error(`Unknown Claude capture resource: ${selector}; run setup inventory first`);
+  const only = options.onlyResources && new Set(options.onlyResources);
+  const excluded = new Set(options.excludeResources ?? []);
+  return (selector: string) => only ? only.has(selector) : !excluded.has(selector) && defaults.get(selector) === true;
+}
+
+function nativeSkillSources(dir: string, linkedRoot?: string, includeEntry: (entry: string) => boolean = () => true): { dir: string; folder: string }[] {
   const skip = new Set([".git", "node_modules", "memory", "sessions", ".DS_Store"]);
   const linked: { dir: string; folder: string }[] = [];
   let files: string[];
   if (linkedRoot) {
+    const entries = readdirSync(dir).sort().filter(entry => !skip.has(entry) && includeEntry(entry));
+    if (!entries.length) return [];
     if (lstatSync(dir).isSymbolicLink()) throw new Error(`Symlinks are not portable: ${dir}`);
     const allowed = existsSync(linkedRoot) && !lstatSync(linkedRoot).isSymbolicLink()
       ? realpathSync(linkedRoot)
       : null;
-    files = readdirSync(dir).sort().flatMap(entry => {
-      if (skip.has(entry)) return [];
+    files = entries.flatMap(entry => {
       const path = join(dir, entry);
       if (!lstatSync(path).isSymbolicLink()) return walk(path, skip);
       let target: string;
@@ -265,12 +307,15 @@ function nativeSkillSources(dir: string, linkedRoot?: string): { dir: string; fo
   ].sort((a, b) => a.folder.localeCompare(b.folder));
 }
 
-export function captureSetup(options: { name: string; scope: "work" | "personal"; harness: SetupHarness; agentDir?: string; project?: string; workflowId?: string; prompt?: string; model?: string; version?: string }): Setup {
+export function captureSetup(options: { name: string; scope: "work" | "personal"; harness: SetupHarness; agentDir?: string; project?: string; workflowId?: string; prompt?: string; model?: string; version?: string; onlyResources?: string[]; excludeResources?: string[] }): Setup {
   setupHarnessSchema.parse(options.harness);
+  if (options.harness !== "claude-code" && (options.onlyResources || options.excludeResources))
+    throw new Error("Resource selection currently supports Claude Code setup capture only");
   if (options.harness === "pi") return captureProfile({ ...options, agentDir: options.agentDir ?? nativeAgentDir("pi") });
   if (options.harness === "cursor" || options.harness === "opencode") return captureProjectSetup(options, options.harness);
   const harness = options.harness; const root = resolve(options.agentDir ?? nativeAgentDir(harness));
   if (!existsSync(root)) throw new Error(`Harness directory does not exist: ${root}`);
+  const includeResource = harness === "claude-code" ? selectedClaudeResources(options) : () => true;
   const layers = [{ root, label: "global" }, ...(options.project ? [{ root: join(resolve(options.project), harness === "codex" ? ".codex" : ".claude"), label: "project" }] : [])];
   const body: Omit<NativeSetup, "revision"> = { schemaVersion: 2, kind: "setup", name: options.name, scope: options.scope,
     harness: { kind: harness, version: options.version ?? detectedVersion(harness) }, settings: {}, workflow: { id: options.workflowId ?? "pr-review", prompt: options.prompt ?? DEFAULT_NATIVE_REVIEW },
@@ -289,24 +334,27 @@ export function captureSetup(options: { name: string; scope: "work" | "personal"
       if (harness === "codex" && raw.mcp_servers) for (const name of mcpNames(raw.mcp_servers)) serverNames.add(name);
       body.settings = { ...body.settings, ...selectedSettings(harness, raw, body.omittedSettings) };
     }
-    for (const kind of ["hooks", "agents", "prompts"] as const) {
+    for (const kind of ["hooks", "agents", "prompts", ...(harness === "claude-code" ? ["commands" as const] : [])] as const) {
       const dir = join(layer.root, kind); if (!existsSync(dir)) continue;
-      const files = walk(dir, new Set([".git", "node_modules", "sessions", "memory", ".DS_Store"]));
+      const skip = new Set([".git", "node_modules", "sessions", "memory", ".DS_Store"]);
+      const files = harness === "claude-code"
+        ? readdirSync(dir).sort().filter(entry => !skip.has(entry) && includeResource(`${layer.label}/${kind}/${entry}`)).flatMap(entry => walk(join(dir, entry), skip))
+        : walk(dir, skip);
       if (!files.length) continue;
-      const dest = `${layer.label}/${kind}`; body.resources[kind].push(dest);
+      const dest = `${layer.label}/${kind}`; body.resources[kind === "commands" ? "prompts" : kind].push(dest);
       body.files.push(...files.map(file => packFile(`${dest}/${relative(dir, file).split("\\").join("/")}`, readFileSync(file), Boolean(lstatSync(file).mode & 0o111))));
     }
     // Repository instructions and automatic memory belong to the local task.
     if (layer.label === "global") {
       const instruction = [harness === "codex" ? "AGENTS.override.md" : "CLAUDE.md", harness === "codex" ? "AGENTS.md" : "CLAUDE.md"].map(n => join(root, n)).find(existsSync);
-      if (instruction) { const path = `global/${basename(instruction)}`; body.files.push(packFile(path, readFileSync(instruction))); body.instructions.push(path); }
+      if (instruction && includeResource(`global/${basename(instruction)}`)) { const path = `global/${basename(instruction)}`; body.files.push(packFile(path, readFileSync(instruction))); body.instructions.push(path); }
     }
     const dirs = [join(layer.root, "skills")];
     if (harness === "codex") dirs.push(join(layer.label === "global" ? (root === resolve(nativeAgentDir("codex")) ? homedir() : dirname(root)) : resolve(options.project!), ".agents/skills"));
     const linkedRoot = harness === "claude-code"
       ? join(layer.label === "global" ? (root === resolve(nativeAgentDir("claude-code")) ? homedir() : dirname(root)) : resolve(options.project!), ".agents/skills")
       : undefined;
-    for (const dir of new Set(dirs)) if (existsSync(dir)) for (const source of nativeSkillSources(dir, linkedRoot)) {
+    for (const dir of new Set(dirs)) if (existsSync(dir)) for (const source of nativeSkillSources(dir, linkedRoot, entry => includeResource(`${layer.label}/skills/${entry}`))) {
       const skillDir = source.dir; const hasReceipt = existsSync(join(skillDir, ".pi-share-skill.json"));
       try {
         const skill = captureSkill({ dir: skillDir, scope: options.scope, ...(hasReceipt ? {} : { compatibleWith: [harness] }) }); skills.set(skill.name, skill);

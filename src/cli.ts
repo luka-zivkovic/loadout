@@ -46,6 +46,7 @@ import {
 import {
   addSkillToSetup,
   captureSetup,
+  claudeCaptureInventory,
   getSetup,
   listSetups,
   materializeSetup,
@@ -63,7 +64,10 @@ const help = `Loadout — shared skills, native harness setups, and metadata-onl
   skill list | show NAME | export NAME --out FILE | import FILE
   skill install NAME --harness pi|claude-code|codex|cursor|opencode [--project DIR | --out DIR]
   skill extract SETUP SKILL_NAME [--compatible pi,claude-code,codex,cursor,opencode]
+  setup inventory --harness claude-code [--agent-dir DIR] [--project DIR]
   setup capture NAME --harness pi|claude-code|codex|cursor|opencode [--agent-dir DIR] [--project DIR]
+                       [--only-resource SELECTOR ... | --exclude-resource SELECTOR ... | --no-resources] (Claude Code)
+  Claude selectors come from setup inventory; commands are opt-in, while settings and MCP names are separate.
   setup list | show NAME
   setup add-skill NAME SKILL [--as LOCAL_NAME]
   setup materialize NAME --out NEW_CONFIG_DIR
@@ -170,6 +174,9 @@ const { values: v, positionals: p } = parseArgs({
     compatible: { type: "string" },
     requires: { type: "string" },
     "harness-version": { type: "string" },
+    "only-resource": { type: "string", multiple: true },
+    "exclude-resource": { type: "string", multiple: true },
+    "no-resources": { type: "boolean" },
   },
 });
 const need = (value: string | undefined, name: string) => {
@@ -337,6 +344,12 @@ async function main() {
     );
     if (result.records.some((r) => r.status !== "completed"))
       process.exitCode = 1;
+    return;
+  }
+  if (p[0] === "setup" && p[1] === "inventory") {
+    if (need(v.harness, "--harness") !== "claude-code")
+      throw new Error("Setup inventory currently supports Claude Code only");
+    console.log(JSON.stringify(claudeCaptureInventory({ agentDir: v["agent-dir"], project: v.project }), null, 2));
     return;
   }
   const store = new Store(v.home, v.scope ?? "personal");
@@ -742,6 +755,8 @@ async function main() {
       return;
     }
     if (p[1] === "capture") {
+      if (v["no-resources"] && (v["only-resource"] || v["exclude-resource"]))
+        throw new Error("Use --no-resources alone, without --only-resource or --exclude-resource");
       const options = {
         name: need(p[2], "NAME"),
         scope: store.scope,
@@ -752,6 +767,8 @@ async function main() {
         prompt: v.prompt ? readFileSync(v.prompt, "utf8") : undefined,
         model: v.model,
         version: v["harness-version"],
+        onlyResources: v["no-resources"] ? [] : v["only-resource"],
+        excludeResources: v["exclude-resource"],
       };
       const setup = saveSetup(store, captureSetup(options));
       rememberCapture(
