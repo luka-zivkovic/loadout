@@ -227,6 +227,64 @@ test('Claude capture includes linked shared skills without following unrelated s
   assert.throws(() => captureSetup(options), /Symlinks are not portable/);
 });
 
+test('n8n credential references in skill examples are not treated as embedded keys', t => {
+  const dir = temp(t); const root = join(dir, '.claude');
+  const skill = join(root, 'skills/node-credential-auth-test/SKILL.md');
+  const header = '---\nname: node-credential-auth-test\ndescription: Review node authentication patterns.\n---\n';
+  const examples = "| Custom header | `{ headers: { 'X-Api-Key': '={{$credentials.apiKey}}' } }` |\n| Query string | `{ qs: { api_key: '={{$credentials.apiKey}}' } }` |\n| Password | `{ password: '={{$credentials.password}}' }` |\n| Secret | `{ secret: '={{$credentials.clientSecret}}' }` |";
+  put(join(root, 'settings.json'), '{}'); put(skill, header + examples);
+  const options = { name: 'auth-examples', scope: 'work', harness: 'claude-code', agentDir: root, version: 'fixture' };
+  assert.equal(captureSetup(options).skillPins[0].name, 'node-credential-auth-test');
+  put(skill, header + examples + "\napi_key: '={{$credentials.apiKey}}-literal-value-123456'\n");
+  assert.throws(() => captureSetup(options), /Possible embedded credential/);
+  put(skill, header + "\npassword: 'hardcoded-value-123456'\n");
+  assert.throws(() => captureSetup(options), /Possible embedded credential/);
+});
+
+test('Claude inventory and resource selection skip unchosen files before scanning', t => {
+  const dir = temp(t); const root = join(dir, '.claude'); const project = join(dir, 'project'); const local = join(dir, 'store');
+  put(join(root, 'settings.json'), '{"model":"test-model"}');
+  put(join(root, 'CLAUDE.md'), 'General instructions.');
+  put(join(root, 'skills/keep/SKILL.md'), '---\nname: keep\ndescription: Keep this skill.\n---\nKeep.');
+  put(join(root, 'skills/unused/SKILL.md'), "---\nname: unused\ndescription: Do not share.\n---\napi_key: 'literal-value-123456789'\n");
+  put(join(root, 'agents/reviewer.md'), 'Review a change.');
+  put(join(root, 'hooks/format.sh'), '#!/bin/sh\nexit 0\n');
+  put(join(root, 'prompts/note.md'), 'Remember the task.');
+  put(join(root, 'commands/check.md'), 'Check the current node.');
+  put(join(project, '.claude/skills/project-task/SKILL.md'), '---\nname: project-task\ndescription: Project task.\n---\nTask.');
+  const cli = (...args) => execFileSync(process.execPath, ['dist/cli.js', ...args, '--home', local, '--scope', 'work'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const common = ['--harness', 'claude-code', '--agent-dir', root, '--project', project, '--harness-version', 'fixture'];
+  const inventory = JSON.parse(cli('setup', 'inventory', ...common));
+  assert(inventory.some(item => item.selector === 'global/skills/unused' && item.includedByDefault));
+  assert(inventory.some(item => item.selector === 'global/commands/check.md' && !item.includedByDefault));
+  assert(inventory.some(item => item.selector === 'project/skills/project-task'));
+  assert.throws(() => cli('setup', 'capture', 'all', ...common), /Possible embedded credential/);
+  const excluded = JSON.parse(cli('setup', 'capture', 'without-unused', ...common, '--exclude-resource', 'global/skills/unused'));
+  assert.deepEqual(excluded.skillPins.map(pin => pin.name).sort(), ['keep', 'project-task']);
+  assert(!excluded.files.some(file => file.path.includes('commands/check.md')));
+  put(join(dir, 'outside/SKILL.md'), '---\nname: outside\ndescription: Not a shared skill.\n---\nOutside.');
+  symlinkSync(join(dir, 'outside'), join(root, 'skills/outside'), 'dir');
+  const bare = JSON.parse(cli('setup', 'capture', 'settings-only', ...common, '--no-resources'));
+  assert.deepEqual(bare.files, []);
+  assert.deepEqual(bare.settings, { model: 'test-model' });
+  const selected = JSON.parse(cli('setup', 'capture', 'chosen', ...common,
+    '--only-resource', 'global/skills/keep',
+    '--only-resource', 'global/commands/check.md',
+    '--only-resource', 'project/skills/project-task'));
+  assert.deepEqual(selected.skillPins.map(pin => pin.name).sort(), ['keep', 'project-task']);
+  assert(selected.files.some(file => file.path === 'global/commands/check.md'));
+  assert(!selected.files.some(file => file.path === 'global/CLAUDE.md' || file.path.includes('agents/reviewer.md') || file.path.includes('hooks/format.sh')));
+  assert.deepEqual(selected.settings, { model: 'test-model' });
+  assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'unchanged');
+  put(join(root, 'skills/unused/SKILL.md'), "---\nname: unused\ndescription: Still private.\n---\npassword: 'literal-value-987654321'\n");
+  assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'unchanged');
+  put(join(root, 'skills/keep/SKILL.md'), '---\nname: keep\ndescription: Keep this skill.\n---\nChanged.');
+  assert.equal(JSON.parse(cli('setup', 'check', 'chosen'))[0].state, 'changed');
+  assert.throws(() => cli('setup', 'capture', 'typo', ...common, '--only-resource', 'global/skills/missing'), /Unknown Claude capture resource/);
+  assert.throws(() => cli('setup', 'capture', 'mixed', ...common, '--only-resource', 'global/skills/keep', '--exclude-resource', 'global/skills/unused'), /either --only-resource or --exclude-resource/);
+  assert.throws(() => cli('setup', 'capture', 'mixed', ...common, '--no-resources', '--only-resource', 'global/skills/keep'), /Use --no-resources alone/);
+});
+
 test('skill registry exchange preserves ownership, old revisions, conflicts, and a metadata-only catalogue', async t => {
   const dir = temp(t); const f = await registryFixture(t, dir); const a = await f.client('a', 'alice'); const a2 = await f.client('a2', 'alice'); const b = await f.client('b', 'bob');
   const skill = makeSkill(join(dir, 'skill')); await a.client.publishSkill(skill); await a2.client.pullSkill('alice/precise-review');

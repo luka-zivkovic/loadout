@@ -18,6 +18,8 @@ const optionsSchema = z.object({
   promptFile: z.string().optional(),
   model: z.string().optional(),
   version: z.string().optional(),
+  onlyResources: z.array(z.string()).optional(),
+  excludeResources: z.array(z.string()).optional(),
 });
 const sourcesSchema = z.record(
   id,

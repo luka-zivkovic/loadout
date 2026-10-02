@@ -187,7 +187,7 @@ function Publish({
   const targetCheck = `Target Loadout instance: ${targetSetups}\nTarget team ID: ${team.teamId}\n\nUse my existing local remote alias as REMOTE. Run loadout team status REMOTE --scope ${team.scope}, then confirm its url is ${targetOrigin} and its teamId is ${team.teamId}. If no matching alias exists, ask me to choose an unused alias and run loadout team login REMOTE --scope ${team.scope} --url ${targetOrigin}. Wait for me to approve the device code, then check status again. Never publish through an alias pointing elsewhere.`;
   const captureInstructions = kind === "skill"
     ? "Ask me to choose a local skill directory. Capture it with loadout skill capture and declare only the harnesses we have checked. Inspect the saved skill with loadout skill inspect SKILL_NAME."
-    : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it. Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}\nCapture and inspection save locally; the publish step below shares the reviewed revision with this workspace.`;
+    : `This is a one-time setup share. Ask whether to include the current project folder; only add --project DIR if I choose it.${harness === "claude-code" ? ` Before capture, run loadout setup inventory --harness claude-code --scope ${team.scope} (with the same optional --project DIR) and show me the local resource selectors grouped by kind. Ask which skills, agents, hooks, prompts, global instructions, and optional commands to share. Use repeated --only-resource SELECTOR options for my chosen items, repeated --exclude-resource SELECTOR options to omit items, or --no-resources if I choose none. Do not combine these modes. Settings and MCP server names are still included when present.` : ""} Capture the reusable ${harnessLabels[harness as Harness]} configuration with:\nloadout setup capture ${name} --harness ${harness} --scope ${team.scope}\nloadout setup inspect ${name} --scope ${team.scope}\nCapture and inspection save locally; the publish step below shares the reviewed revision with this workspace.`;
   const instructions = [
     `Help me share a ${kind} with Loadout (${team.teamName}, ${team.scope}). Use my existing local Loadout CLI and remote alias; if it is unavailable, use node /path/to/pi-share/dist/cli.js from the local repository.`,
     ...(kind === "setup" ? [targetCheck] : []),
@@ -236,13 +236,18 @@ function Publish({
           </>
         )}
         <ol className="flow-steps">
-          <li>Capture reusable configuration on a connected device.</li>
+          <li>{kind === "setup" && harness === "claude-code" ? "Choose local resources, then capture on a connected device." : "Capture reusable configuration on a connected device."}</li>
           <li>Inspect files, hooks, requirements, and omitted settings.</li>
           <li>Publish the reviewed revision to this workspace.</li>
         </ol>
         {kind === "setup" && (
           <p className="text-small muted spaced">
             Target workspace: <a href={targetSetups}>{targetSetups}</a>
+          </p>
+        )}
+        {kind === "setup" && harness === "claude-code" && (
+          <p className="text-small muted spaced">
+            Resource selection happens on your device; this site cannot read your local Claude files.
           </p>
         )}
         {validName ? (

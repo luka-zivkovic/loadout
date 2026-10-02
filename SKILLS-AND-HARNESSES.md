@@ -63,7 +63,15 @@ loadout team publish engineering my-claude --scope work
 
 `--agent-dir` selects another configuration directory. `--project` includes supported project configuration/resources; repository instruction files stay with the task. `--workflow` and `--prompt FILE` declare the reusable workflow. Native versions are detected from the installed CLI; a missing executable records `unknown`. `--harness-version` is available for offline/test capture.
 
-Native capture deliberately selects supported model/reasoning settings, permission settings, hooks, reusable global instructions, skill directories, and other reusable resources. Claude captures enabled plugin declarations. Cursor captures project rules, commands, agents, hooks, and skills, plus portable CLI permissions. OpenCode captures JSON/JSONC model and agent settings, commands, agents, plugins, tools, and skills. All four native harnesses record MCP server names only; commands, arguments, URLs, and credentials are not included. Authentication files, telemetry destinations, session history, automatic memories, arbitrary environment values, and project account/trust state are excluded. Omitted setting names appear in the setup inspector.
+For Claude Code, list local choices before capture. The inventory lists selectors without reading file contents. Pass `--only-resource` once per item you want to share, `--exclude-resource` for items to leave out, or `--no-resources` if you want only the selected settings and MCP names. These modes cannot be combined. Skills, agents, hooks, prompts, and global `CLAUDE.md` are included by default; Claude commands require explicit selection. Settings and MCP server names are handled separately from these resource selectors. An unselected resource's contents are not scanned or bundled.
+
+```sh
+loadout setup inventory --harness claude-code --scope work
+loadout setup capture my-claude --harness claude-code --scope work --exclude-resource global/skills/unused
+loadout setup capture lean-claude --harness claude-code --scope work --only-resource global/skills/reviewer --only-resource global/agents/reviewer.md
+```
+
+Native capture deliberately selects supported model/reasoning settings, permission settings, hooks, reusable global instructions, skill directories, and other reusable resources. Claude captures enabled plugin declarations. Cursor captures project rules, commands, agents, hooks, and skills, plus portable CLI permissions. OpenCode captures JSON/JSONC model and agent settings, commands, agents, plugins, tools, and skills. All four native harnesses record MCP server names only; MCP launch commands, arguments, URLs, and credentials are not included. Authentication files, telemetry destinations, session history, automatic memories, arbitrary environment values, and project account/trust state are excluded. Omitted setting names appear in the setup inspector.
 
 Plugin declarations and named MCP servers are requirements, not bundled installations. Configure MCP servers independently on each receiving device. Hook scripts are bundled when they live under the captured hooks directory, but machine-specific command paths may need adjustment. Dependencies outside captured directories and installed plugin caches are not copied. Managed policies remain authoritative.
 
